@@ -25,12 +25,11 @@ export async function loadData() {
     try {
       const data = JSON.parse(local);
       if (bundled?.config) data.config = bundled.config; // config は常に最新で上書き
-      // シードの手動タスク（source.manual）は未登録なら毎回マージ（GAS同期では消えない）
+      // シードの手動タスク（source.manual）でローカルの手動タスクを置き換える
+      // （GAS同期のsource.sheet案件は保持。手動分は常にシード最新に同期）
       if (Array.isArray(bundled?.projects)) {
-        const ids = new Set((data.projects || []).map((p) => p.id));
-        data.projects = data.projects || [];
-        bundled.projects.filter((p) => p.source && p.source.manual && !ids.has(p.id))
-          .forEach((p) => data.projects.push(p));
+        const seedManual = bundled.projects.filter((p) => p.source && p.source.manual);
+        data.projects = (data.projects || []).filter((p) => !(p.source && p.source.manual)).concat(seedManual);
       }
       return data;
     } catch { /* fallthrough */ }
