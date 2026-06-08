@@ -30,7 +30,7 @@
     "capacity": {
       "weeks_per_month": 4.33,
       "available_h": { "mon": 12, "tue": 12, "wed": 12, "thu": 12, "fri": 12, "sat": 12, "sun_am": 5, "sun_pm": 5 },
-      "sunday_pm_off": true,
+      "sunday_pm_off": false,
       "overhead_h": { "morning_roundup_per_day": 1, "weekly_mtg": 1, "monthly_extra": 2 },
       "businesses": {
         "2ch": {

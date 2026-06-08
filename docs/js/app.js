@@ -49,15 +49,16 @@ function ryutonWeekday() {
     {t:"18:30",end:"20:00",cat:"ops",label:"バッファ",detail:"未完・突発対応",buf:true},
   ];
 }
+// スマホ日＝午前にりゅうとん台本（1日分ストック）→ 午後スマホ（企画・台本・FB）
 function smaWeekday() {
   return [
     {t:"7:00",end:"8:00",cat:"ops",label:"ミーティング準備",detail:"CW / Discord / SLACK"},
-    {t:"8:00",end:"10:00",cat:"sma",label:"スマホ 企画・撮影チェック",detail:"由美子 1本ぶん"},
-    {t:"10:00",end:"12:00",cat:"sma",label:"スマホ 台本・サムネ",detail:""},
+    {t:"8:00",end:"10:00",cat:"2ch",label:"りゅうとん 台本（ストック）",detail:"まず1日分"},
+    {t:"10:00",end:"12:00",cat:"2ch",label:"りゅうとん 台本（ストック）",detail:""},
     {t:"12:00",end:"13:00",cat:"ops",label:"昼食・仮眠",lunch:true},
-    {t:"13:00",end:"15:00",cat:"sma",label:"スマホ 台本・サムネ",detail:""},
-    {t:"15:00",end:"17:00",cat:"sma",label:"スマホ 編集FB・修正指示",detail:"編集が上がったらFB"},
-    {t:"17:00",end:"18:30",cat:"sma",label:"スマホ 企画ストック・FB続き",detail:"週1本ぶんをここで仕上げ"},
+    {t:"13:00",end:"15:00",cat:"sma",label:"スマホ 企画・撮影チェック",detail:"由美子 週1本"},
+    {t:"15:00",end:"17:00",cat:"sma",label:"スマホ 台本・サムネ",detail:""},
+    {t:"17:00",end:"18:30",cat:"sma",label:"スマホ 編集FB・修正指示",detail:""},
     {t:"18:30",end:"20:00",cat:"ops",label:"バッファ",detail:"未完・突発対応",buf:true},
   ];
 }
@@ -123,8 +124,9 @@ function baseSchedule(dow) {
     6:[ {t:"7:00",end:"12:00",cat:"2ch",label:"りゅうとん 作業（午前）",detail:"遅れ分キャッチアップ"},
         {t:"12:00",end:"13:00",cat:"ops",label:"昼食・仮眠",lunch:true},
         {t:"13:00",end:"20:00",cat:"2ch",label:"りゅうとん 作業・バッファ",detail:"間に合わない分を進める",buf:true} ],
-    0:[ {t:"7:00",end:"12:00",cat:"2ch",label:"りゅうとん 作業（午前・任意）",detail:"遅れ分のみ"},
-        {t:"12:00",end:"20:00",cat:"ops",label:"午後オフ",detail:"日曜午後は原則休み",lunch:true} ],
+    0:[ {t:"7:00",end:"12:00",cat:"2ch",label:"りゅうとん 作業（午前）",detail:"台本ストック"},
+        {t:"12:00",end:"13:00",cat:"ops",label:"昼食・仮眠",lunch:true},
+        {t:"13:00",end:"20:00",cat:"2ch",label:"りゅうとん 作業（午後）",detail:"ストック積み増し・遅れ分"} ],
   };
   let day;
   if (dow===6 || dow===0) day = S[dow] || [];
@@ -159,9 +161,9 @@ function renderAll() { renderCapStrip(); renderAlerts(); renderCalendar(); rende
 // 曜日別の既定本数目標（スマホ日はスマホ1本＋りゅうとん巻き取り1、他はりゅうとん集中）
 function quotaDefault(dow) {
   const smaSet = new Set(data.config.schedule?.smaDays || [2,4]);
-  if (dow===0) return { "2ch":2, "sma":0 };
+  if (dow===0) return { "2ch":3, "sma":0 };           // 日曜午後もりゅうとん
   if (dow===6) return { "2ch":3, "sma":0 };
-  if (smaSet.has(dow)) return { "2ch":1, "sma":1 };
+  if (smaSet.has(dow)) return { "2ch":3, "sma":1 };   // 混合日: 午前りゅうとん3＋午後スマホ1
   return { "2ch":4, "sma":0 };
 }
 function todayTargets(ds = fmt(now())) {
@@ -210,7 +212,7 @@ function renderCapStrip() {
     <span class="cap-sep">vs</span>
     <div class="cap-box"><b>${round1(c.available)}h</b><small>使える/週</small></div>
     <span class="cap-bal ${over?'ng':'ok'}">${over?`⚠${round1(-c.balance)}h超過`:`✓${round1(c.balance)}h余裕`}</span>
-    <span class="cap-pill ${c.sundayCanRest?'pill-ok':'pill-ng'}">${c.sundayCanRest?'日曜午後 休める':'日曜午後 要稼働'}</span>
+    <span class="cap-pill ${c.sundayWork?'pill-ok':c.sundayCanRest?'pill-ok':'pill-ng'}">${c.sundayWork?'日曜午後もりゅうとん':c.sundayCanRest?'日曜午後 休める':'日曜午後 要稼働'}</span>
     <span style="margin-left:auto;font-size:11px;color:var(--text3)">ノルマは右の日付の横に表示 →</span>`;
 }
 
@@ -502,7 +504,7 @@ function adjPreview(){
   const c=computeCapacity(applyAdj(data.config, readAdj()), now(), data.events||[]);
   if(!c){ $("#adj-preview").textContent=""; return; }
   const over=c.balance<0;
-  $("#adj-preview").innerHTML=`必要 <b>${round1(c.demand)}h</b> ／ 使える <b>${round1(c.available)}h</b> → <b style="color:${over?'var(--danger)':'var(--ok)'}">${over?`⚠ ${round1(-c.balance)}h 超過`:`✓ ${round1(c.balance)}h 余裕`}</b><br><span style="color:${c.sundayCanRest?'var(--ok)':'var(--danger)'};font-weight:700">${c.sundayCanRest?'日曜午後 休める🎉':'日曜午後 要稼働'}</span>`;
+  $("#adj-preview").innerHTML=`必要 <b>${round1(c.demand)}h</b> ／ 使える <b>${round1(c.available)}h</b> → <b style="color:${over?'var(--danger)':'var(--ok)'}">${over?`⚠ ${round1(-c.balance)}h 超過`:`✓ ${round1(c.balance)}h 余裕`}</b><br><span style="color:${c.sundayWork||c.sundayCanRest?'var(--ok)':'var(--danger)'};font-weight:700">${c.sundayWork?'日曜午後もりゅうとん（稼働）':c.sundayCanRest?'日曜午後 休める🎉':'日曜午後 要稼働'}</span>`;
 }
 function saveAdj(){
   data.config_adj=readAdj();

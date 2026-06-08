@@ -97,8 +97,11 @@ export function computeCapacity(config, now = new Date(), events = []) {
   const availFull = weekdaysSat + sunFull;
   const availRestSun = weekdaysSat + sunRest;
 
-  const sundayCanRest = demand <= availRestSun;
-  const available = sundayCanRest ? availRestSun : availFull;
+  // sunday_pm_off:false = 日曜午後も稼働する方針（りゅうとんに充てる）
+  const wantRest = cap.sunday_pm_off !== false;
+  const sundayCanRest = wantRest && demand <= availRestSun;
+  const sundayWork = !wantRest;                          // 方針として日曜も働く
+  const available = (sundayCanRest) ? availRestSun : availFull;
   const balance = available - demand;
 
   // 日次プラン（使える時間に比例配分）。自分の制作工程は本数で表示。
@@ -130,7 +133,7 @@ export function computeCapacity(config, now = new Date(), events = []) {
 
   return {
     businesses, bizTotal, overhead, demand,
-    availFull, availRestSun, available, balance, sundayCanRest,
+    availFull, availRestSun, available, balance, sundayCanRest, sundayWork,
     selfBiz, dailyPlan, privateH, privateList,
   };
 }
