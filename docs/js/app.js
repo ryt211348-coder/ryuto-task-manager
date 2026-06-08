@@ -16,13 +16,17 @@ const blockKey = (ds,label,t) => `${ds}__${label}__${t}`;
 const timeToMin = (t) => { const [h,m]=t.split(":").map(Number); return h*60+(m||0); };
 const startOfToday = () => { const d=now(); d.setHours(0,0,0,0); return d; };
 const TBCLS = { "2ch":"tb-2ch", pop:"tb-pop", sma:"tb-sma", mtg:"tb-mtg", ops:"tb-ops" };
+const CATBG = { "2ch":"#FEF0EC", pop:"#FDF0F6", sma:"#EDFAF4", mtg:"#F0EFFE", ops:"#F4F3F1" };
+const CATFILL = { "2ch":"#F3B49E", pop:"#F0AEC6", sma:"#86D8BC", mtg:"#BFBAF2", ops:"#CFCDC2" };
+const fillBg = (cat, prog) => `linear-gradient(90deg, ${CATFILL[cat]||CATFILL.ops} ${prog}%, ${CATBG[cat]||CATBG.ops} ${prog}%)`;
+const GOAL_SHEET_URL = "https://docs.google.com/spreadsheets/d/16wE7P2V6o4NFx7BrlZVsfDHk3naRguBWszd3_uo1aXM/edit?gid=472092447#gid=472092447";
 const EVCLS = { "2ch":"ev-2ch", pop:"ev-pop", sma:"ev-sma", mtg:"ev-mtg", ops:"ev-ops" };
 const esc = (s) => String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 
 // ---- 週次ベーススケジュール 7:00-20:00 ----
 function baseSchedule(dow) {
   const S = {
-    1:[ {t:"7:00",end:"8:00",cat:"ops",label:"朝まとめ",detail:"CW / Discord / SLACK 確認・返信"},
+    1:[ {t:"7:00",end:"8:00",cat:"ops",label:"ミーティング準備",detail:"CW / Discord / SLACK 確認・返信"},
         {t:"8:00",end:"10:00",cat:"2ch",label:"りゅうとん 企画・台本①",detail:"集中2h"},
         {t:"10:00",end:"12:00",cat:"2ch",label:"りゅうとん 企画・台本②",detail:"集中2h"},
         {t:"12:00",end:"13:00",cat:"ops",label:"昼食・仮眠",lunch:true},
@@ -30,7 +34,7 @@ function baseSchedule(dow) {
         {t:"15:00",end:"17:00",cat:"2ch",label:"りゅうとん 編集FB",detail:"全本チェック・修正指示"},
         {t:"17:00",end:"18:30",cat:"pop",label:"Popteen 確認・FB",detail:"素材確認・修正指示"},
         {t:"18:30",end:"20:00",cat:"ops",label:"バッファ",detail:"未完・突発対応",buf:true} ],
-    2:[ {t:"7:00",end:"8:00",cat:"ops",label:"朝まとめ",detail:"CW / Discord / SLACK"},
+    2:[ {t:"7:00",end:"8:00",cat:"ops",label:"ミーティング準備",detail:"CW / Discord / SLACK"},
         {t:"8:00",end:"10:00",cat:"sma",label:"スマホ① 企画・撮影チェック",detail:"由美子 1本目（週2本）"},
         {t:"10:00",end:"12:00",cat:"sma",label:"スマホ① 台本・サムネ",detail:""},
         {t:"12:00",end:"13:00",cat:"ops",label:"昼食・仮眠",lunch:true},
@@ -39,7 +43,7 @@ function baseSchedule(dow) {
         {t:"15:00",end:"17:00",cat:"sma",label:"スマホ① やりとり・編集者へ渡し",detail:""},
         {t:"17:00",end:"18:30",cat:"2ch",label:"りゅうとん 台本（巻き取り）",detail:""},
         {t:"18:30",end:"20:00",cat:"ops",label:"バッファ",detail:"未完・突発対応",buf:true} ],
-    3:[ {t:"7:00",end:"8:00",cat:"ops",label:"朝まとめ",detail:""},
+    3:[ {t:"7:00",end:"8:00",cat:"ops",label:"ミーティング準備",detail:""},
         {t:"8:00",end:"10:00",cat:"2ch",label:"りゅうとん 企画・台本①",detail:"集中2h"},
         {t:"10:00",end:"12:00",cat:"2ch",label:"りゅうとん 企画・台本②",detail:"集中2h"},
         {t:"12:00",end:"13:00",cat:"ops",label:"昼食・仮眠",lunch:true},
@@ -47,7 +51,7 @@ function baseSchedule(dow) {
         {t:"15:00",end:"17:00",cat:"2ch",label:"りゅうとん 編集FB",detail:""},
         {t:"17:00",end:"18:30",cat:"pop",label:"Popteen 確認・FB",detail:""},
         {t:"18:30",end:"20:00",cat:"ops",label:"バッファ",detail:"",buf:true} ],
-    4:[ {t:"7:00",end:"8:00",cat:"ops",label:"朝まとめ",detail:""},
+    4:[ {t:"7:00",end:"8:00",cat:"ops",label:"ミーティング準備",detail:""},
         {t:"8:00",end:"10:00",cat:"sma",label:"スマホ② 企画・撮影チェック",detail:"由美子 2本目（週2本）"},
         {t:"10:00",end:"12:00",cat:"sma",label:"スマホ② 台本・サムネ",detail:""},
         {t:"12:00",end:"13:00",cat:"ops",label:"昼食・仮眠",lunch:true},
@@ -55,7 +59,7 @@ function baseSchedule(dow) {
         {t:"15:00",end:"17:00",cat:"sma",label:"スマホ② やりとり・編集者へ渡し",detail:""},
         {t:"17:00",end:"18:30",cat:"2ch",label:"りゅうとん 編集FB",detail:""},
         {t:"18:30",end:"20:00",cat:"ops",label:"バッファ",detail:"",buf:true} ],
-    5:[ {t:"7:00",end:"8:00",cat:"ops",label:"朝まとめ",detail:"週次整理"},
+    5:[ {t:"7:00",end:"8:00",cat:"ops",label:"ミーティング準備",detail:"週次整理"},
         {t:"8:00",end:"10:00",cat:"2ch",label:"りゅうとん 来週仕込み①",detail:"集中2h"},
         {t:"10:00",end:"12:00",cat:"2ch",label:"りゅうとん 来週仕込み②",detail:"集中2h"},
         {t:"12:00",end:"13:00",cat:"ops",label:"昼食・仮眠",lunch:true},
@@ -101,10 +105,11 @@ function renderCapStrip() {
   const over = c.balance < 0;
   // 今日のノルマ（りゅうとん台本）
   const sr = o.rows.find((r) => r.cat === "2ch" && r.key === "script") || { todayActual: 0, todayTarget: 0 };
-  let praise = "今日のノルマ、いきましょう💪";
-  if (o.todayExtra > 0) praise = `🔥 予定より ${o.todayExtra}本 多い！最高！`;
-  else if (o.todayMet) praise = "🎉 今日のノルマ達成！";
-  if (o.weekMet) praise = "🏆 週の目標 全達成！";
+  const MSGS = ["今日のノルマ、いこう💪","1本目ナイス！この調子🔥","2本目、乗ってきた⚡","3本目！手が止まらない🙌","絶好調、まだいける😤","量産モード突入🚀"];
+  let praise = MSGS[Math.min(sr.todayActual, MSGS.length - 1)];
+  if (o.todayMet && sr.todayTarget > 0) praise = "🎉 今日のノルマ達成！えらい！";
+  if (o.todayExtra > 0) praise = `🔥 予定より ${o.todayExtra}本 多い！最高、その勢い！`;
+  if (o.weekMet) praise = "🏆 週の目標 全達成！本当にすごい！";
   $("#cap-strip").innerHTML = `
     <div class="cap-box"><b class="${over?'':''}" style="color:${over?'var(--danger)':'var(--ok)'}">${round1(c.demand)}h</b><small>必要/週</small></div>
     <span class="cap-sep">vs</span>
@@ -129,7 +134,7 @@ function renderAlerts() {
     if (diff < 0 && c && c.type !== "wait") {
       bar.insertAdjacentHTML("beforeend", `<div class="alert-item alert-danger">⚠️ <strong>${esc(p.title)}</strong> 締切 ${Math.abs(diff)}日超過${c.type==="chase"?` → ${esc(c.member?.name||"")}に確認`:""}</div>`);
     } else if (diff >= 0 && diff <= 1 && c && c.type === "self") {
-      bar.insertAdjacentHTML("beforeend", `<div class="alert-item alert-warn">⏰ <strong>${esc(p.title)}</strong> あと${diff}日 → 自分が上げる</div>`);
+      bar.insertAdjacentHTML("beforeend", `<div class="alert-item alert-warn">⏰ <strong>${esc(p.title)}</strong> あと${diff}日 → ${esc(c.ball.checkpoint.label)}</div>`);
     }
   });
 }
@@ -148,7 +153,12 @@ function renderCalendar() {
     const dow = new Date(curYear, curMonth, d).getDay();
     let html = `<div class="dnum">${d}</div>`;
     const chips = [];
-    (data.projects||[]).forEach((p) => { if (dueDate(p)===ds && p.status!=="canceled") chips.push({cls:EVCLS[p.cat]||"ev-ops", txt:p.title.replace(/（.*）/,"")}); });
+    (data.projects||[]).forEach((p) => {
+      if (dueDate(p)!==ds || p.status==="canceled") return;
+      let cls=EVCLS[p.cat]||"ev-ops";
+      if (p.cat==="pop"){ if(/和也/.test(p.title)) cls="ev-suba"; else if(/長田|Slack/.test(p.title)) cls="ev-subb"; }
+      chips.push({ cls, txt:p.title.replace(/（.*）/,"") });
+    });
     (data.events||[]).forEach((e) => { if (e.date===ds) chips.push({cls:"ev-priv", txt:"🗓 "+(e.label||"私用")}); });
     (data.spots?.[ds]||[]).forEach((s) => chips.push({cls:"ev-mtg", txt:"▶ "+s.label}));
     chips.slice(0,3).forEach((c) => html += `<div class="ev-chip ${c.cls}">${esc(c.txt)}</div>`);
@@ -182,7 +192,7 @@ function renderDay(ds) {
     acts.forEach(({p,c})=>{
       const color = ({ "2ch":"var(--c2ch)",pop:"var(--cpop)",sma:"var(--csma)",ops:"var(--cops)" })[p.cat]||"var(--cops)";
       let doTxt, cls="";
-      if (c.type==="self"){ doTxt=`自分が上げる（${esc(c.ball.checkpoint.label)}）`; cls="self"; }
+      if (c.type==="self"){ doTxt=esc(c.ball.checkpoint.label); cls="self"; }
       else if (c.type==="chase"){ doTxt=`${esc(c.member?.name||"")} に進捗確認`; cls="chase"; }
       else doTxt=`${esc(c.member?.name||"")} 対応中・待ち`;
       h += `<div class="act-row"><div class="act-dot" style="background:${color}"></div><div><span style="font-weight:500">${esc(p.title)}</span> <span class="act-do ${cls}">→ ${doTxt}</span></div></div>`;
@@ -201,14 +211,19 @@ function renderDay(ds) {
     const key = blockKey(ds,b.label,b.t);
     const isDone = (data.done||{})[key] || false;
     const prog = (data.progress||{})[key] ?? (isDone?100:0);
+    const isMtg = b.cat==="mtg";
+    const noProg = b.lunch || b.buf || isMtg;           // MTG・昼食・バッファは%なし
     let tb = TBCLS[b.cat]||"tb-ops"; if (b.lunch) tb="tb-lunch"; if (b.buf) tb="tb-buf";
-    const pc = prog>=100?"#1D9E75":prog>=50?"#BA7517":"#E8441C";
-    let html = `<div class="tblock"><div class="tblock-time">${b.t}</div><div class="tblock-card ${tb}${isDone?" done":""}" data-done="${key}">`;
+    // 作業ブロックは「セルが満ちる」グラデで背景を塗る
+    const styleAttr = noProg ? "" : ` style="background:${fillBg(b.cat, prog)}"`;
+    let html = `<div class="tblock"><div class="tblock-time">${b.t}</div>`
+      + `<div class="tblock-card ${tb}${isDone?" done":""}" data-done="${key}" data-cat="${b.cat}"${styleAttr}>`;
     if (b.spot) html += `<div class="spot-badge">スポット</div>`;
     html += `<div class="tblock-name">${esc(b.label)}</div>`;
     if (b.detail) html += `<div class="tblock-detail">${esc(b.detail)}</div>`;
-    if (!b.lunch && !b.buf) html += `<div class="prog-wrap"><div class="prog-bar" style="width:${prog}%;background:${pc}"></div></div>
-      <div class="prog-row"><input type="range" min="0" max="100" step="10" value="${prog}" data-prog="${key}"><span>${prog}%</span></div>`;
+    if (b.label==="ミーティング準備") html += `<div style="margin-top:3px"><a href="${GOAL_SHEET_URL}" target="_blank" rel="noopener" data-stop="1" style="font-size:10px;color:var(--cmtg)">📝 目標・進捗をシートに記入 ↗</a></div>`;
+    if (!noProg) html += `<div class="prog-row"><input type="range" min="0" max="100" step="1" value="${prog}" data-prog="${key}"><span>${prog}%</span></div>`;
+    else if (isMtg) html += `<div class="mtg-check${isDone?" on":""}">${isDone?"✓ 完了":"クリックで完了"}</div>`;
     if (b.spot) html += `<div style="margin-top:4px"><button data-rmspot="${ds}|${b.spotId}" style="font-size:9px;background:none;border:none;color:var(--text3);cursor:pointer">× 削除</button></div>`;
     html += `</div></div>`;
     body.insertAdjacentHTML("beforeend", html);
@@ -222,7 +237,7 @@ function renderTaskList() {
   const color = (c)=>({ "2ch":"#E8441C",pop:"#C2407A",sma:"#0E8F68",ops:"#7A7672" })[c]||"#888";
   el.innerHTML = ps.map((p)=>{
     const c = classifyProj(p);
-    const tag = c ? (c.type==="self"?"自分が上げる":c.type==="chase"?`${c.member?.name||""}に確認`:`${c.member?.name||""}待ち`) : "";
+    const tag = c ? (c.type==="self"?esc(c.ball.checkpoint.label):c.type==="chase"?`${c.member?.name||""}に確認`:`${c.member?.name||""}待ち`) : "";
     return `<div class="task-row"><div class="task-dot" style="background:${color(p.cat)}"></div>
       <div class="task-info"><div class="task-name">${esc(p.title)}</div>
       <div class="task-dates">${p.due_at?fmt(new Date(p.due_at)):"—"} ・ ${esc(tag)}</div></div></div>`;
@@ -323,10 +338,22 @@ function wire(){
   $("#set-reset").onclick=async()=>{ if(!confirm("ローカルの変更を破棄して再読込しますか？")) return; resetLocal(); data=await loadData(); renderAll(); toast("再読込しました"); };
   $("#cap-strip").addEventListener("click",(e)=>{ const b=e.target.closest("[data-q]"); if(b) bumpQuota(+b.dataset.q); });
   $("#day-body").addEventListener("click",(e)=>{
-    const dn=e.target.closest("[data-done]"); if(dn && e.target.tagName!=="INPUT"){ toggleDone(dn.dataset.done); return; }
-    const rm=e.target.closest("[data-rmspot]"); if(rm){ const [ds,id]=rm.dataset.rmspot.split("|"); data.spots[ds]=(data.spots[ds]||[]).filter((s)=>String(s.id)!==id); saveLocal(data); renderAll(); }
+    if(e.target.closest("[data-stop]")) return; // シートリンク等は完了トグルしない
+    const rm=e.target.closest("[data-rmspot]");
+    if(rm){ const [ds,id]=rm.dataset.rmspot.split("|"); data.spots[ds]=(data.spots[ds]||[]).filter((s)=>String(s.id)!==id); saveLocal(data); renderAll(); return; }
+    const dn=e.target.closest("[data-done]"); if(dn && e.target.tagName!=="INPUT") toggleDone(dn.dataset.done);
   });
-  $("#day-body").addEventListener("input",(e)=>{ const r=e.target.closest("[data-prog]"); if(r){ r.nextElementSibling.textContent=r.value+"%"; setProgress(r.dataset.prog,r.value); } });
+  // 進捗スライダー：その場で背景を塗る（再描画しないのでチラつかない／1%刻み）
+  $("#day-body").addEventListener("input",(e)=>{
+    const r=e.target.closest("[data-prog]"); if(!r) return;
+    const key=r.dataset.prog, val=parseInt(r.value);
+    const card=r.closest(".tblock-card");
+    if(card){ card.style.background=fillBg(card.dataset.cat||"ops", val); card.classList.toggle("done", val>=100); }
+    const span=r.parentElement.querySelector("span"); if(span) span.textContent=val+"%";
+    data.progress=data.progress||{}; data.done=data.done||{};
+    data.progress[key]=val; data.done[key]=val>=100;
+    saveLocal(data);
+  });
 }
 
 (async function init(){
