@@ -98,30 +98,51 @@ const dueDate = (p) => p.due_at ? fmt(new Date(p.due_at)) : null;
 // ════ レンダリング ════
 function renderAll() { renderCapStrip(); renderAlerts(); renderCalendar(); renderDay(selectedDate); renderTaskList(); }
 
+// 曜日別の既定本数目標（火木=スマホ日、月水金土=りゅうとん）
+function quotaDefault(dow) {
+  const ryuton = { 1:4, 2:1, 3:4, 4:1, 5:4, 6:3, 0:2 }[dow] || 0;
+  const sma = { 2:1, 4:1 }[dow] || 0;
+  return { "2ch": ryuton, "sma": sma };
+}
+function todayTargets() {
+  const ds = fmt(now()); const dow = new Date(ds+"T00:00:00").getDay();
+  const def = quotaDefault(dow); const ov = (data.quota_target||{})[ds] || {};
+  return { "2ch": ov["2ch"] ?? def["2ch"], "sma": ov["sma"] ?? def["sma"] };
+}
+const quotaActual = (cat) => (data.output_log?.[fmt(now())]?.[cat]?.script) || 0;
+
 function renderCapStrip() {
   const c = computeCapacity(data.config, now(), data.events || []);
   if (!c) { $("#cap-strip").innerHTML = ""; return; }
-  const o = computeOutput(c, now(), data.output_log || {});
   const over = c.balance < 0;
-  // 今日のノルマ（りゅうとん台本）
-  const sr = o.rows.find((r) => r.cat === "2ch" && r.key === "script") || { todayActual: 0, todayTarget: 0 };
+  const tgt = todayTargets();
+  const LBL = { "2ch": "りゅうとん台本", "sma": "スマホ" };
+  const COL = { "2ch": "var(--c2ch)", "sma": "var(--csma)" };
+  let totalA = 0, totalT = 0, counters = "";
+  ["2ch", "sma"].forEach((cat) => {
+    const t = tgt[cat] || 0, a = quotaActual(cat);
+    if (t <= 0 && a <= 0) return;
+    totalA += a; totalT += t;
+    const met = a >= t && t > 0, extra = a > t;
+    counters += `<span class="qitem">
+      <span class="qlabel" style="color:${COL[cat]}">${LBL[cat]}</span>
+      <button class="qbtn" data-q="-1" data-cat="${cat}">−</button>
+      <b data-tgt="${cat}" title="クリックで目標本数を変更">${a}/${t}</b>
+      <button class="qbtn plus" data-q="1" data-cat="${cat}">＋</button>
+      ${extra?"🔥":met?"✓":""}</span>`;
+  });
+  if (!counters) counters = `<span class="muted" style="font-size:12px">今日の制作目標なし（休/予備日）</span>`;
   const MSGS = ["今日のノルマ、いこう💪","1本目ナイス！この調子🔥","2本目、乗ってきた⚡","3本目！手が止まらない🙌","絶好調、まだいける😤","量産モード突入🚀"];
-  let praise = MSGS[Math.min(sr.todayActual, MSGS.length - 1)];
-  if (o.todayMet && sr.todayTarget > 0) praise = "🎉 今日のノルマ達成！えらい！";
-  if (o.todayExtra > 0) praise = `🔥 予定より ${o.todayExtra}本 多い！最高、その勢い！`;
-  if (o.weekMet) praise = "🏆 週の目標 全達成！本当にすごい！";
+  let praise = MSGS[Math.min(totalA, MSGS.length - 1)];
+  if (totalT > 0 && totalA >= totalT) praise = "🎉 今日のノルマ達成！えらい！";
+  if (totalT > 0 && totalA > totalT) praise = `🔥 予定より ${totalA-totalT}本 多い！最高、その勢い！`;
   $("#cap-strip").innerHTML = `
-    <div class="cap-box"><b class="${over?'':''}" style="color:${over?'var(--danger)':'var(--ok)'}">${round1(c.demand)}h</b><small>必要/週</small></div>
+    <div class="cap-box"><b style="color:${over?'var(--danger)':'var(--ok)'}">${round1(c.demand)}h</b><small>必要/週</small></div>
     <span class="cap-sep">vs</span>
     <div class="cap-box"><b>${round1(c.available)}h</b><small>使える/週</small></div>
     <span class="cap-bal ${over?'ng':'ok'}">${over?`⚠${round1(-c.balance)}h超過`:`✓${round1(c.balance)}h余裕`}</span>
     <span class="cap-pill ${c.sundayCanRest?'pill-ok':'pill-ng'}">${c.sundayCanRest?'日曜午後 休める':'日曜午後 要稼働'}</span>
-    <div class="quota">
-      <span style="font-size:11px;color:var(--text3)">今日の台本</span>
-      <b>${sr.todayActual}/${sr.todayTarget}</b>
-      <button class="qbtn" data-q="-1">−</button><button class="qbtn plus" data-q="1">＋</button>
-      <span class="praise ${o.todayExtra>0||o.weekMet?'hot':''}">${praise}</span>
-    </div>`;
+    <div class="quota">${counters}<span class="praise ${totalT>0&&totalA>totalT?'hot':''}">${praise}</span></div>`;
 }
 
 function renderAlerts() {
@@ -161,6 +182,7 @@ function renderCalendar() {
     });
     (data.events||[]).forEach((e) => { if (e.date===ds) chips.push({cls:"ev-priv", txt:"🗓 "+(e.label||"私用")}); });
     (data.spots?.[ds]||[]).forEach((s) => chips.push({cls:"ev-mtg", txt:"▶ "+s.label}));
+    (data.notes?.[ds]||[]).forEach((n) => chips.push({cls:"ev-shoot", txt:"📷 "+n}));
     chips.slice(0,3).forEach((c) => html += `<div class="ev-chip ${c.cls}">${esc(c.txt)}</div>`);
     if (chips.length>3) html += `<div style="font-size:8px;color:var(--text3);text-align:center">+${chips.length-3}</div>`;
     const cls = `cal-cell${dow===0?" sun":dow===6?" sat":""}${ds===today?" today":""}${ds===selectedDate?" selected":""}`;
@@ -177,6 +199,13 @@ function renderDay(ds) {
   $("#day-title").textContent = fmtDisp(ds);
   $("#day-meta").textContent = ds===fmt(now()) ? "今日" : "";
   const body = $("#day-body"); body.innerHTML = "";
+
+  // 撮影日などのメモ（自分のタスクではないが関連情報）
+  const notes = data.notes?.[ds] || [];
+  if (notes.length) {
+    body.insertAdjacentHTML("beforeend", `<div class="day-notes">${notes.map((n,i)=>
+      `<span class="note-chip">📷 ${esc(n)}<button data-rmnote="${i}" data-stop="1">×</button></span>`).join("")}</div>`);
+  }
 
   // 本日のアクション：その日が締切の案件（今日なら超過分も）
   const st = startOfToday();
@@ -259,10 +288,17 @@ function toggleDone(key){
   data.done[key]=!data.done[key]; if(data.done[key]) data.progress[key]=100;
   saveLocal(data); renderDay(selectedDate);
 }
-function bumpQuota(delta){
+function bumpQuota(cat, delta){
   const t=fmt(now());
-  data.output_log=data.output_log||{}; data.output_log[t]=data.output_log[t]||{}; data.output_log[t]["2ch"]=data.output_log[t]["2ch"]||{};
-  data.output_log[t]["2ch"].script = Math.max(0,(data.output_log[t]["2ch"].script||0)+delta);
+  data.output_log=data.output_log||{}; data.output_log[t]=data.output_log[t]||{}; data.output_log[t][cat]=data.output_log[t][cat]||{};
+  data.output_log[t][cat].script = Math.max(0,(data.output_log[t][cat].script||0)+delta);
+  saveLocal(data); renderCapStrip();
+}
+function setQuotaTarget(cat){
+  const ds=fmt(now()); const cur=todayTargets()[cat];
+  const v=prompt(`${cat==="2ch"?"りゅうとん":"スマホ"}の今日の目標本数`, cur); if(v===null) return;
+  const n=parseInt(v); if(isNaN(n)) return;
+  data.quota_target=data.quota_target||{}; data.quota_target[ds]=data.quota_target[ds]||{}; data.quota_target[ds][cat]=n;
   saveLocal(data); renderCapStrip();
 }
 
@@ -311,6 +347,14 @@ function addSpot(){
   data.spots=data.spots||{}; data.spots[date]=data.spots[date]||[]; data.spots[date].push({id:Date.now()%100000,cat,label:title,t:time,end,dur});
   saveLocal(data); $("#dlg-spot").close(); selectedDate=date; renderAll(); toast("スポットを追加");
 }
+// カレンダーの撮影日メモ（自分のタスクではないが関連情報）
+function addNote(){
+  const text=prompt("カレンダーに残すメモ（例: TC#57 撮影日 / 素材受領 → 編集者へ渡す）"); if(!text) return;
+  const date=prompt("日付 (YYYY-MM-DD)", selectedDate||fmt(now())); if(!date) return;
+  data.notes=data.notes||{}; data.notes[date]=data.notes[date]||[]; data.notes[date].push(text);
+  saveLocal(data); selectedDate=date; renderAll(); toast("メモを追加");
+}
+
 function addEvent(){
   const label=prompt("私用の内容（例: 病院 / 家族）"); if(!label) return;
   const date=prompt("日付 (YYYY-MM-DD)", fmt(now())); if(!date) return;
@@ -327,6 +371,7 @@ function wire(){
   $("#m-next").onclick=()=>{ curMonth++; if(curMonth>11){curMonth=0;curYear++;} renderCalendar(); };
   $("#b-sync").onclick=()=>syncSheet(false);
   $("#b-event").onclick=addEvent;
+  $("#b-note").onclick=addNote;
   $("#b-spot").onclick=()=>{ $("#sp-date").value=selectedDate||fmt(now()); $("#dlg-spot").showModal(); };
   $("#sp-cancel").onclick=()=>$("#dlg-spot").close();
   $("#sp-add").onclick=addSpot;
@@ -336,8 +381,13 @@ function wire(){
     saveGhConfig({owner:$("#set-owner").value.trim(),repo:$("#set-repo").value.trim(),branch:$("#set-branch").value.trim()||"main",path:$("#set-path").value.trim()||"tasks.json",token:$("#set-token").value.trim()});
     $("#dlg-set").close(); toast("設定を保存"); persist(); syncSheet(false); };
   $("#set-reset").onclick=async()=>{ if(!confirm("ローカルの変更を破棄して再読込しますか？")) return; resetLocal(); data=await loadData(); renderAll(); toast("再読込しました"); };
-  $("#cap-strip").addEventListener("click",(e)=>{ const b=e.target.closest("[data-q]"); if(b) bumpQuota(+b.dataset.q); });
+  $("#cap-strip").addEventListener("click",(e)=>{
+    const b=e.target.closest("[data-q]"); if(b){ bumpQuota(b.dataset.cat, +b.dataset.q); return; }
+    const tg=e.target.closest("[data-tgt]"); if(tg) setQuotaTarget(tg.dataset.tgt);
+  });
   $("#day-body").addEventListener("click",(e)=>{
+    const rn=e.target.closest("[data-rmnote]");
+    if(rn){ const i=+rn.dataset.rmnote; (data.notes[selectedDate]||[]).splice(i,1); if(!data.notes[selectedDate]?.length) delete data.notes[selectedDate]; saveLocal(data); renderAll(); return; }
     if(e.target.closest("[data-stop]")) return; // シートリンク等は完了トグルしない
     const rm=e.target.closest("[data-rmspot]");
     if(rm){ const [ds,id]=rm.dataset.rmspot.split("|"); data.spots[ds]=(data.spots[ds]||[]).filter((s)=>String(s.id)!==id); saveLocal(data); renderAll(); return; }

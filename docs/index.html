@@ -39,7 +39,9 @@ body{background:var(--bg2);color:var(--text);font-family:var(--font);min-height:
 .cap-pill{font-size:11px;padding:2px 8px;border-radius:999px;font-weight:700;}
 .pill-ok{background:var(--csma-bg);color:var(--ok);}.pill-ng{background:var(--danger-bg);color:var(--danger);}
 .quota{margin-left:auto;display:flex;align-items:center;gap:8px;background:var(--bg2);border-radius:10px;padding:6px 10px;}
-.quota b{font-family:var(--mono);font-size:15px;}
+.quota b{font-family:var(--mono);font-size:15px;cursor:pointer;}
+.qitem{display:inline-flex;align-items:center;gap:4px;}
+.qlabel{font-size:11px;font-weight:700;}
 .qbtn{border:1px solid var(--border);background:var(--bg);width:24px;height:24px;border-radius:6px;cursor:pointer;font-weight:800;}
 .qbtn.plus{background:var(--c2ch);color:#fff;border-color:var(--c2ch);}
 .praise{font-size:12px;font-weight:700;color:var(--cmtg);}
@@ -121,6 +123,9 @@ body{background:var(--bg2);color:var(--text);font-family:var(--font);min-height:
 .prog-row span{font-size:10px;color:var(--text2);min-width:26px;font-family:var(--mono);}
 .spot-badge{font-size:9px;background:var(--cmtg-bg);color:var(--cmtg);border-radius:3px;padding:1px 5px;display:inline-block;margin-bottom:2px;}
 .empty-day{font-size:12px;color:var(--text3);text-align:center;padding:30px 16px;font-family:var(--mono);}
+.day-notes{display:flex;flex-direction:column;gap:4px;margin-bottom:8px;}
+.note-chip{background:#FFF4D6;color:#9A6B0F;border-radius:6px;padding:4px 8px;font-size:11px;display:flex;align-items:center;justify-content:space-between;gap:6px;}
+.note-chip button{background:none;border:none;color:#9A6B0F;cursor:pointer;font-size:13px;line-height:1;}
 
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--text);color:#fff;border-radius:10px;padding:10px 16px;z-index:9999;font-size:12px;opacity:0;transition:.25s;}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
@@ -146,6 +151,7 @@ dialog input,dialog select{width:100%;padding:6px 8px;border:0.5px solid var(--b
     <div class="hbtns">
       <button class="ibtn" id="b-spot">＋スポット</button>
       <button class="ibtn" id="b-event">＋私用</button>
+      <button class="ibtn" id="b-note">＋メモ</button>
       <button class="ibtn" id="b-sync" title="スプレッドシートから進行を取り込み">🔄 同期</button>
       <button class="ibtn" id="b-set">⚙ 設定</button>
     </div>
