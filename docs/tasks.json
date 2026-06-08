@@ -26,6 +26,7 @@
     "cat_colors": {
       "2ch": "#E8441C", "pop": "#C2407A", "sma": "#0E8F68", "ops": "#7A7672", "mtg": "#5B4FD4"
     },
+    "schedule": { "smaDays": [2] },
     "capacity": {
       "weeks_per_month": 4.33,
       "available_h": { "mon": 12, "tue": 12, "wed": 12, "thu": 12, "fri": 12, "sat": 12, "sun_am": 5, "sun_pm": 5 },
@@ -41,11 +42,11 @@
           "weekly_deliveries": 14, "fb_min_per_delivery": 10
         },
         "sma": {
-          "label": "スマホ", "unit": "本", "weekly_target": 2,
+          "label": "スマホ", "unit": "本", "weekly_target": 1,
           "phases": [
             { "key": "plot", "label": "企画", "h_per_unit": 3 },
             { "key": "script", "label": "台本/サムネ", "h_per_unit": 5 },
-            { "key": "comm", "label": "やりとり", "h_per_unit": 6 }
+            { "key": "fb", "label": "FB・やりとり", "h_per_unit": 6 }
           ],
           "fb_min_per_unit": 30
         },

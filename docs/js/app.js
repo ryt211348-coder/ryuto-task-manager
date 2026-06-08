@@ -56,8 +56,8 @@ function smaWeekday() {
     {t:"10:00",end:"12:00",cat:"sma",label:"スマホ 台本・サムネ",detail:""},
     {t:"12:00",end:"13:00",cat:"ops",label:"昼食・仮眠",lunch:true},
     {t:"13:00",end:"15:00",cat:"sma",label:"スマホ 台本・サムネ",detail:""},
-    {t:"15:00",end:"17:00",cat:"sma",label:"スマホ 台本・サムネ仕上げ",detail:""},
-    {t:"17:00",end:"18:30",cat:"2ch",label:"りゅうとん 台本（巻き取り）",detail:""},
+    {t:"15:00",end:"17:00",cat:"sma",label:"スマホ 編集FB・修正指示",detail:"編集が上がったらFB"},
+    {t:"17:00",end:"18:30",cat:"sma",label:"スマホ 企画ストック・FB続き",detail:"週1本ぶんをここで仕上げ"},
     {t:"18:30",end:"20:00",cat:"ops",label:"バッファ",detail:"未完・突発対応",buf:true},
   ];
 }
