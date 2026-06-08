@@ -69,7 +69,11 @@ function baseSchedule(dow) {
     0:[ {t:"7:00",end:"12:00",cat:"2ch",label:"りゅうとん 作業（午前・任意）",detail:"遅れ分のみ"},
         {t:"12:00",end:"20:00",cat:"ops",label:"午後オフ",detail:"日曜午後は原則休み",lunch:true} ],
   };
-  return S[dow] || [];
+  const day = S[dow] || [];
+  // 全日共通: 6:00〜7:00 早朝予備 ＋ 20:00〜24:00 夜バッファ（20時以降も予定/対応を入れられる）
+  const early = {t:"6:00",end:"7:00",cat:"ops",label:"早朝（予備）",detail:"早く始めるならここに",buf:true};
+  const night = {t:"20:00",end:"24:00",cat:"ops",label:"夜バッファ（20時以降の追加対応OK）",detail:"スポットや未完をここに",buf:true};
+  return [early, ...day, night];
 }
 
 // ---- 案件の状態分類（self / chase / wait）----

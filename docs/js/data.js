@@ -25,6 +25,13 @@ export async function loadData() {
     try {
       const data = JSON.parse(local);
       if (bundled?.config) data.config = bundled.config; // config は常に最新で上書き
+      // シードの手動タスク（source.manual）は未登録なら毎回マージ（GAS同期では消えない）
+      if (Array.isArray(bundled?.projects)) {
+        const ids = new Set((data.projects || []).map((p) => p.id));
+        data.projects = data.projects || [];
+        bundled.projects.filter((p) => p.source && p.source.manual && !ids.has(p.id))
+          .forEach((p) => data.projects.push(p));
+      }
       return data;
     } catch { /* fallthrough */ }
   }
