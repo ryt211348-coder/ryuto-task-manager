@@ -111,8 +111,7 @@ function todayTargets(ds = fmt(now())) {
 }
 // 完了した作業ブロック数で本数をカウント（チェックで自動増減）
 function quotaDone(ds) {
-  const dow = new Date(ds+"T00:00:00").getDay();
-  const blocks = baseSchedule(dow).concat(data.spots?.[ds] || []);
+  const blocks = dayBlocks(ds);
   const cnt = { "2ch":0, "sma":0 };
   blocks.forEach((b)=>{
     if (b.lunch || b.buf || b.cat==="mtg") return;
@@ -204,6 +203,44 @@ function renderCalendar() {
   for (let i=1;i<=rem;i++) grid.insertAdjacentHTML("beforeend", `<div class="cal-cell other"><div class="dnum">${i}</div></div>`);
 }
 
+// ---- 1日の並び（編集すると dayPlan[ds] に保存）----
+function dayBlocks(ds) {
+  if (data.dayPlan && data.dayPlan[ds]) return data.dayPlan[ds].map((b)=>({...b}));
+  const dow = new Date(ds+"T00:00:00").getDay();
+  const blocks = baseSchedule(dow).map((b)=>({...b}));
+  (data.spots?.[ds]||[]).forEach((sp)=>blocks.push({t:sp.t,end:sp.end,cat:sp.cat,label:sp.label,detail:"スポット追加",spot:true,spotId:sp.id}));
+  blocks.sort((a,b)=>timeToMin(a.t)-timeToMin(b.t));
+  return blocks;
+}
+function materializeDay(ds){ data.dayPlan=data.dayPlan||{}; if(!data.dayPlan[ds]) data.dayPlan[ds]=dayBlocks(ds); return data.dayPlan[ds]; }
+
+// ドラッグで2つの枠の中身を入れ替え（時刻は固定）
+function swapBlocks(ds,i,j){
+  if(i===j || i==null || j==null) return;
+  const arr=materializeDay(ds); const a=arr[i], b=arr[j]; if(!a||!b) return;
+  const keep=new Set(["t","end"]);
+  const na={t:a.t,end:a.end}, nb={t:b.t,end:b.end};
+  Object.keys(b).forEach((k)=>{ if(!keep.has(k)) na[k]=b[k]; });
+  Object.keys(a).forEach((k)=>{ if(!keep.has(k)) nb[k]=a[k]; });
+  arr[i]=na; arr[j]=nb;
+  saveLocal(data); renderDay(ds); toast("入れ替えました");
+}
+
+// バッファ/早朝枠に入れるタスクを選ぶ（前日の未完も候補）
+function bufferPick(ds, idx){
+  const yds=fmt(new Date(new Date(ds+"T00:00:00").getTime()-86400000));
+  const yInc=dayBlocks(yds).filter((b)=>!b.lunch&&!b.buf&&b.cat!=="mtg"&&["2ch","sma","pop"].includes(b.cat)&&!(data.done||{})[blockKey(yds,b.label,b.t)]).map((b)=>b.label);
+  const base=["りゅうとん 台本","りゅうとん 企画","スマホ 台本・サムネ","Popteen 確認・FB"];
+  const opts=[...base, ...yInc.map((l)=>"前日: "+l), "（バッファに戻す）"];
+  const pick=prompt("この枠に入れるタスク：\n"+opts.map((o,i)=>`${i+1}. ${o}`).join("\n")+"\n\n番号を入力", "");
+  if(!pick) return; const n=parseInt(pick)-1; if(isNaN(n)||n<0||n>=opts.length) return;
+  const arr=materializeDay(ds); const blk=arr[idx]; if(!blk) return;
+  if(n===opts.length-1){ Object.assign(blk,{label:"バッファ",cat:"ops",buf:true,detail:"未完・突発対応"}); }
+  else { const label=opts[n].replace(/^前日: /,""); let cat="2ch"; if(/スマホ/.test(label))cat="sma"; else if(/Popteen/.test(label))cat="pop";
+    Object.assign(blk,{label,cat,buf:false,detail:opts[n].startsWith("前日:")?"前日からの繰越":"バッファに配置"}); }
+  saveLocal(data); renderDay(ds); toast("配置しました");
+}
+
 function renderDay(ds) {
   const d = new Date(ds+"T00:00:00"), dow = d.getDay();
   $("#day-title").textContent = fmtDisp(ds);
@@ -240,29 +277,34 @@ function renderDay(ds) {
     body.insertAdjacentHTML("beforeend", h);
   }
 
-  // 時間割
-  let blocks = baseSchedule(dow).map((b)=>({...b}));
-  (data.spots?.[ds]||[]).forEach((sp)=>blocks.push({t:sp.t,end:sp.end,cat:sp.cat,label:sp.label,detail:"スポット追加",spot:true,spotId:sp.id}));
-  blocks.sort((a,b)=>timeToMin(a.t)-timeToMin(b.t));
+  // 時間割（編集済みなら dayPlan を使う）
+  const blocks = dayBlocks(ds);
   if (!blocks.length){ body.insertAdjacentHTML("beforeend",`<div class="empty-day">スケジュールなし</div>`); return; }
 
-  blocks.forEach((b)=>{
+  // 完了サマリ（上にまとめて表示）
+  const doneList = blocks.filter((b)=>!b.lunch && (data.done||{})[blockKey(ds,b.label,b.t)]);
+  if (doneList.length) body.insertAdjacentHTML("beforeend",
+    `<div class="done-summary">✓ 完了 ${doneList.length}：${doneList.map((b)=>esc(b.label)).join(" / ")}</div>`);
+
+  body.insertAdjacentHTML("beforeend", `<div class="drag-hint">↕ ドラッグで入替／バッファ枠はクリックでタスク配置</div>`);
+
+  blocks.forEach((b,i)=>{
     const key = blockKey(ds,b.label,b.t);
     const isDone = (data.done||{})[key] || false;
     const prog = (data.progress||{})[key] ?? (isDone?100:0);
     const isMtg = b.cat==="mtg";
     const noProg = b.lunch || b.buf || isMtg;           // MTG・昼食・バッファは%なし
     let tb = TBCLS[b.cat]||"tb-ops"; if (b.lunch) tb="tb-lunch"; if (b.buf) tb="tb-buf";
-    // 作業ブロックは「セルが満ちる」グラデで背景を塗る
     const styleAttr = noProg ? "" : ` style="background:${fillBg(b.cat, prog)}"`;
-    let html = `<div class="tblock"><div class="tblock-time">${b.t}</div>`
-      + `<div class="tblock-card ${tb}${isDone?" done":""}" data-done="${key}" data-cat="${b.cat}"${styleAttr}>`;
+    let html = `<div class="tblock" draggable="true" data-idx="${i}"><div class="tblock-time">${b.t}</div>`
+      + `<div class="tblock-card ${tb}${isDone?" done":""}" data-done="${key}" data-cat="${b.cat}" data-idx="${i}"${b.buf?' data-buf="1"':''}${styleAttr}>`;
     if (b.spot) html += `<div class="spot-badge">スポット</div>`;
     html += `<div class="tblock-name">${esc(b.label)}</div>`;
     if (b.detail) html += `<div class="tblock-detail">${esc(b.detail)}</div>`;
     if (b.label==="ミーティング準備") html += `<div style="margin-top:3px"><a href="${GOAL_SHEET_URL}" target="_blank" rel="noopener" data-stop="1" style="font-size:10px;color:var(--cmtg)">📝 目標・進捗をシートに記入 ↗</a></div>`;
     if (!noProg) html += `<div class="prog-row"><input type="range" min="0" max="100" step="1" value="${prog}" data-prog="${key}"><span>${prog}%</span></div>`;
     else if (isMtg) html += `<div class="mtg-check${isDone?" on":""}">${isDone?"✓ 完了":"クリックで完了"}</div>`;
+    else if (b.buf) html += `<div class="mtg-check">＋ クリックでタスク配置</div>`;
     if (b.spot) html += `<div style="margin-top:4px"><button data-rmspot="${ds}|${b.spotId}" style="font-size:9px;background:none;border:none;color:var(--text3);cursor:pointer">× 削除</button></div>`;
     html += `</div></div>`;
     body.insertAdjacentHTML("beforeend", html);
@@ -351,7 +393,10 @@ function addSpot(){
   const date=$("#sp-date").value,time=$("#sp-time").value,dur=parseFloat($("#sp-dur").value)||1,cat=$("#sp-cat").value,title=$("#sp-title").value.trim();
   if(!date||!title){ toast("日付とタイトルを入力"); return; }
   const [h,m]=time.split(":").map(Number); const em=h*60+m+dur*60; const end=`${String(Math.floor(em/60)).padStart(2,"0")}:${String(em%60).padStart(2,"0")}`;
-  data.spots=data.spots||{}; data.spots[date]=data.spots[date]||[]; data.spots[date].push({id:Date.now()%100000,cat,label:title,t:time,end,dur});
+  const sid=Date.now()%100000;
+  data.spots=data.spots||{}; data.spots[date]=data.spots[date]||[]; data.spots[date].push({id:sid,cat,label:title,t:time,end,dur});
+  // その日を編集済み（dayPlan）なら、そこにも差し込む
+  if(data.dayPlan?.[date]){ data.dayPlan[date].push({t:time,end,cat,label:title,detail:"スポット追加",spot:true,spotId:sid}); data.dayPlan[date].sort((a,b)=>timeToMin(a.t)-timeToMin(b.t)); }
   saveLocal(data); $("#dlg-spot").close(); selectedDate=date; renderAll(); toast("スポットを追加");
 }
 // カレンダーの撮影日メモ（自分のタスクではないが関連情報）
@@ -395,8 +440,16 @@ function wire(){
     if(e.target.closest("[data-stop]")) return; // シートリンク等は完了トグルしない
     const rm=e.target.closest("[data-rmspot]");
     if(rm){ const [ds,id]=rm.dataset.rmspot.split("|"); data.spots[ds]=(data.spots[ds]||[]).filter((s)=>String(s.id)!==id); saveLocal(data); renderAll(); return; }
-    const dn=e.target.closest("[data-done]"); if(dn && e.target.tagName!=="INPUT") toggleDone(dn.dataset.done);
+    const card=e.target.closest("[data-done]"); if(!card || e.target.tagName==="INPUT") return;
+    if(card.dataset.buf==="1"){ bufferPick(selectedDate, +card.dataset.idx); return; } // バッファ枠 → タスク配置
+    toggleDone(card.dataset.done);
   });
+  // ドラッグで入替
+  let dragIdx=null;
+  $("#day-body").addEventListener("dragstart",(e)=>{ const t=e.target.closest("[data-idx]"); if(t){ dragIdx=+t.dataset.idx; e.dataTransfer.effectAllowed="move"; t.classList.add("dragging"); } });
+  $("#day-body").addEventListener("dragend",(e)=>{ const t=e.target.closest(".tblock"); if(t) t.classList.remove("dragging"); });
+  $("#day-body").addEventListener("dragover",(e)=>{ if(dragIdx!=null) e.preventDefault(); });
+  $("#day-body").addEventListener("drop",(e)=>{ e.preventDefault(); const t=e.target.closest("[data-idx]"); if(t && dragIdx!=null){ swapBlocks(selectedDate, dragIdx, +t.dataset.idx); } dragIdx=null; });
   // 進捗スライダー：その場で背景を塗る（再描画しないのでチラつかない／1%刻み）
   $("#day-body").addEventListener("input",(e)=>{
     const r=e.target.closest("[data-prog]"); if(!r) return;

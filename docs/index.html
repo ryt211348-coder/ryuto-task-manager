@@ -104,7 +104,10 @@ body{background:var(--bg2);color:var(--text);font-family:var(--font);min-height:
 .act-do.self{color:var(--c2ch);font-weight:700;}
 .act-do.chase{color:var(--warn);font-weight:700;}
 
-.tblock{display:flex;gap:6px;margin-bottom:5px;}
+.done-summary{background:#EAFAF3;color:#0E8F68;border-radius:7px;padding:6px 9px;font-size:11px;font-weight:700;margin-bottom:8px;}
+.drag-hint{font-size:10px;color:var(--text3);margin-bottom:6px;font-family:var(--mono);}
+.tblock{display:flex;gap:6px;margin-bottom:5px;cursor:grab;}
+.tblock.dragging{opacity:.4;}
 .tblock-time{font-size:9px;color:var(--text3);width:38px;flex-shrink:0;font-family:var(--mono);padding-top:7px;text-align:right;}
 .tblock-card{flex:1;border-radius:7px;padding:7px 9px;border-left:3px solid transparent;cursor:pointer;transition:background .12s linear;}
 .tblock-card:hover{filter:brightness(.98);}
