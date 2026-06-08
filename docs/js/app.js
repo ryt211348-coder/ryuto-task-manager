@@ -23,6 +23,59 @@ const GOAL_SHEET_URL = "https://docs.google.com/spreadsheets/d/16wE7P2V6o4NFx7Br
 const EVCLS = { "2ch":"ev-2ch", pop:"ev-pop", sma:"ev-sma", mtg:"ev-mtg", ops:"ev-ops" };
 const esc = (s) => String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 
+// 調整パネルの値を config に上書き適用（絶対値なので冪等）
+function applyAdj(config, adj) {
+  if (!adj) return config;
+  const c = JSON.parse(JSON.stringify(config));
+  const B = c.capacity && c.capacity.businesses; if (!B) return c;
+  if (adj.ryuton_weekly != null) B["2ch"].weekly_target = adj.ryuton_weekly;
+  if (adj.script_h != null) { const ph=(B["2ch"].phases||[]).find((p)=>p.key==="script"); if(ph) ph.h_per_unit=adj.script_h; }
+  if (adj.sma_weekly != null) B.sma.weekly_target = adj.sma_weekly;
+  if (adj.pop_monthly != null) B.pop.monthly_target = adj.pop_monthly;
+  if (adj.smaDays != null) { c.schedule = c.schedule || {}; c.schedule.smaDays = adj.smaDays; }
+  return c;
+}
+
+// ---- 平日テンプレート（りゅうとん集中日／スマホ集中日）----
+function ryutonWeekday() {
+  return [
+    {t:"7:00",end:"8:00",cat:"ops",label:"ミーティング準備",detail:"CW / Discord / SLACK 確認・返信"},
+    {t:"8:00",end:"10:00",cat:"2ch",label:"りゅうとん 企画・台本①",detail:"集中2h"},
+    {t:"10:00",end:"12:00",cat:"2ch",label:"りゅうとん 企画・台本②",detail:"集中2h"},
+    {t:"12:00",end:"13:00",cat:"ops",label:"昼食・仮眠",lunch:true},
+    {t:"13:00",end:"15:00",cat:"2ch",label:"りゅうとん 企画・台本③",detail:"集中2h"},
+    {t:"15:00",end:"17:00",cat:"2ch",label:"りゅうとん 編集FB",detail:"全本チェック・修正指示"},
+    {t:"17:00",end:"18:30",cat:"pop",label:"Popteen 確認・FB",detail:"素材確認・修正指示"},
+    {t:"18:30",end:"20:00",cat:"ops",label:"バッファ",detail:"未完・突発対応",buf:true},
+  ];
+}
+function smaWeekday() {
+  return [
+    {t:"7:00",end:"8:00",cat:"ops",label:"ミーティング準備",detail:"CW / Discord / SLACK"},
+    {t:"8:00",end:"10:00",cat:"sma",label:"スマホ 企画・撮影チェック",detail:"由美子 1本ぶん"},
+    {t:"10:00",end:"12:00",cat:"sma",label:"スマホ 台本・サムネ",detail:""},
+    {t:"12:00",end:"13:00",cat:"ops",label:"昼食・仮眠",lunch:true},
+    {t:"13:00",end:"15:00",cat:"sma",label:"スマホ 台本・サムネ",detail:""},
+    {t:"15:00",end:"17:00",cat:"sma",label:"スマホ 台本・サムネ仕上げ",detail:""},
+    {t:"17:00",end:"18:30",cat:"2ch",label:"りゅうとん 台本（巻き取り）",detail:""},
+    {t:"18:30",end:"20:00",cat:"ops",label:"バッファ",detail:"未完・突発対応",buf:true},
+  ];
+}
+// 火曜は智哉さんMTGを14:00に固定で差し込む（どの曜日割でも）
+function injectTuesdayMtg(day, dow) {
+  if (dow !== 2) return day;
+  const out = [];
+  day.forEach((b)=>{
+    const s=timeToMin(b.t), e=timeToMin(b.end);
+    if (s<840 && e>=900 && !b.lunch && !b.buf) {
+      out.push({...b, end:"14:00"});
+      out.push({t:"14:00",end:"15:00",cat:"mtg",label:"智哉さん週次MTG",detail:"毎週固定"});
+      if (e>900) out.push({...b, t:"15:00"});
+    } else out.push(b);
+  });
+  return out;
+}
+
 // ---- 週次ベーススケジュール 7:00-20:00 ----
 function baseSchedule(dow) {
   const S = {
@@ -73,7 +126,12 @@ function baseSchedule(dow) {
     0:[ {t:"7:00",end:"12:00",cat:"2ch",label:"りゅうとん 作業（午前・任意）",detail:"遅れ分のみ"},
         {t:"12:00",end:"20:00",cat:"ops",label:"午後オフ",detail:"日曜午後は原則休み",lunch:true} ],
   };
-  const day = S[dow] || [];
+  let day;
+  if (dow===6 || dow===0) day = S[dow] || [];
+  else {
+    const isSma = (data.config.schedule?.smaDays || [2,4]).includes(dow);
+    day = injectTuesdayMtg(isSma ? smaWeekday() : ryutonWeekday(), dow);
+  }
   // 全日共通: 6:00〜7:00 早朝予備 ＋ 20:00〜24:00 夜バッファ（20時以降も予定/対応を入れられる）
   const early = {t:"6:00",end:"7:00",cat:"ops",label:"早朝（予備）",detail:"早く始めるならここに",buf:true};
   const night = {t:"20:00",end:"24:00",cat:"ops",label:"夜バッファ（20時以降の追加対応OK）",detail:"スポットや未完をここに",buf:true};
@@ -98,11 +156,13 @@ const dueDate = (p) => p.due_at ? fmt(new Date(p.due_at)) : null;
 // ════ レンダリング ════
 function renderAll() { renderCapStrip(); renderAlerts(); renderCalendar(); renderDay(selectedDate); renderTaskList(); }
 
-// 曜日別の既定本数目標（火木=スマホ日、月水金土=りゅうとん）
+// 曜日別の既定本数目標（スマホ日はスマホ1本＋りゅうとん巻き取り1、他はりゅうとん集中）
 function quotaDefault(dow) {
-  const ryuton = { 1:4, 2:1, 3:4, 4:1, 5:4, 6:3, 0:2 }[dow] || 0;
-  const sma = { 2:1, 4:1 }[dow] || 0;
-  return { "2ch": ryuton, "sma": sma };
+  const smaSet = new Set(data.config.schedule?.smaDays || [2,4]);
+  if (dow===0) return { "2ch":2, "sma":0 };
+  if (dow===6) return { "2ch":3, "sma":0 };
+  if (smaSet.has(dow)) return { "2ch":1, "sma":1 };
+  return { "2ch":4, "sma":0 };
 }
 function todayTargets(ds = fmt(now())) {
   const dow = new Date(ds+"T00:00:00").getDay();
@@ -418,6 +478,38 @@ function addEvent(){
 // ---- 設定 ----
 function openSet(){ const g=loadGhConfig()||{}; $("#set-sheet").value=loadSheetUrl(); $("#set-owner").value=g.owner||""; $("#set-repo").value=g.repo||""; $("#set-branch").value=g.branch||"main"; $("#set-path").value=g.path||"tasks.json"; $("#set-token").value=g.token||""; $("#dlg-set").showModal(); }
 
+// ---- 調整パネル ----
+function openAdj(){
+  const B=data.config.capacity.businesses;
+  $("#adj-ryuton").value=B["2ch"].weekly_target;
+  $("#adj-scripth").value=(B["2ch"].phases||[]).find((p)=>p.key==="script")?.h_per_unit ?? 1.0;
+  $("#adj-sma").value=B.sma.weekly_target;
+  $("#adj-pop").value=B.pop.monthly_target;
+  const sd=new Set(data.config.schedule?.smaDays || [2,4]);
+  [1,2,3,4,5,6].forEach((d)=>{ const cb=$("#adj-d"+d); if(cb) cb.checked=sd.has(d); });
+  adjPreview(); $("#dlg-adj").showModal();
+}
+function readAdj(){
+  return {
+    ryuton_weekly: parseFloat($("#adj-ryuton").value)||0,
+    script_h: parseFloat($("#adj-scripth").value)||1,
+    sma_weekly: parseFloat($("#adj-sma").value)||0,
+    pop_monthly: parseFloat($("#adj-pop").value)||0,
+    smaDays: [1,2,3,4,5,6].filter((d)=>$("#adj-d"+d)?.checked),
+  };
+}
+function adjPreview(){
+  const c=computeCapacity(applyAdj(data.config, readAdj()), now(), data.events||[]);
+  if(!c){ $("#adj-preview").textContent=""; return; }
+  const over=c.balance<0;
+  $("#adj-preview").innerHTML=`必要 <b>${round1(c.demand)}h</b> ／ 使える <b>${round1(c.available)}h</b> → <b style="color:${over?'var(--danger)':'var(--ok)'}">${over?`⚠ ${round1(-c.balance)}h 超過`:`✓ ${round1(c.balance)}h 余裕`}</b><br><span style="color:${c.sundayCanRest?'var(--ok)':'var(--danger)'};font-weight:700">${c.sundayCanRest?'日曜午後 休める🎉':'日曜午後 要稼働'}</span>`;
+}
+function saveAdj(){
+  data.config_adj=readAdj();
+  data.config=applyAdj(data.config, data.config_adj);
+  saveLocal(data); $("#dlg-adj").close(); renderAll(); toast("調整を保存しました");
+}
+
 function wire(){
   $("#m-prev").onclick=()=>{ curMonth--; if(curMonth<0){curMonth=11;curYear--;} renderCalendar(); };
   $("#m-next").onclick=()=>{ curMonth++; if(curMonth>11){curMonth=0;curYear++;} renderCalendar(); };
@@ -428,6 +520,10 @@ function wire(){
   $("#sp-cancel").onclick=()=>$("#dlg-spot").close();
   $("#sp-add").onclick=addSpot;
   $("#b-set").onclick=openSet;
+  $("#b-adj").onclick=openAdj;
+  $("#adj-cancel").onclick=()=>$("#dlg-adj").close();
+  $("#adj-save").onclick=saveAdj;
+  $("#dlg-adj").addEventListener("input", adjPreview);
   $("#set-cancel").onclick=()=>$("#dlg-set").close();
   $("#set-save").onclick=()=>{ saveSheetUrl($("#set-sheet").value.trim());
     saveGhConfig({owner:$("#set-owner").value.trim(),repo:$("#set-repo").value.trim(),branch:$("#set-branch").value.trim()||"main",path:$("#set-path").value.trim()||"tasks.json",token:$("#set-token").value.trim()});
@@ -466,6 +562,7 @@ function wire(){
 (async function init(){
   try{
     data = await loadData();
+    data.config = applyAdj(data.config, data.config_adj); // 保存済みの調整を反映
     data.progress=data.progress||{}; data.done=data.done||{}; data.spots=data.spots||{}; data.output_log=data.output_log||{};
     const t=now(); curYear=t.getFullYear(); curMonth=t.getMonth(); selectedDate=fmt(t);
     wire(); renderAll(); syncSheet(true);
