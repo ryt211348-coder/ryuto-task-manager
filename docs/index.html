@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>りゅうと タスク管理</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --c2ch:#E8441C;--c2ch-bg:#FEF0EC;--cpop:#C2407A;--cpop-bg:#FDF0F6;
+  --csma:#0E8F68;--csma-bg:#EDFAF4;--cmtg:#5B4FD4;--cmtg-bg:#F0EFFE;
+  --cops:#7A7672;--cops-bg:#F4F3F1;
+  --warn:#BA7517;--warn-bg:#FAEEDA;--danger:#A32D2D;--danger-bg:#FCEBEB;--ok:#0E8F68;
+  --bg:#fff;--bg2:#F7F6F4;--border:#E5E3DF;--text:#1A1A18;--text2:#5A5955;--text3:#9A9894;
+  --font:'Noto Sans JP',sans-serif;--mono:'DM Mono',monospace;--radius:8px;
+}
+@media(prefers-color-scheme:dark){:root{--bg:#1C1C1A;--bg2:#252523;--border:#3A3A38;--text:#F0EFE8;--text2:#A0A09A;--text3:#606058;--warn-bg:#412402;--danger-bg:#501313;}}
+body{background:var(--bg2);color:var(--text);font-family:var(--font);min-height:100vh;font-size:14px;}
+.app{max-width:1160px;margin:0 auto;padding:16px 14px 40px;}
+.app-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;}
+.app-title{font-size:17px;font-weight:700;font-family:var(--mono);}
+.app-sub{font-size:11px;color:var(--text3);margin-top:2px;}
+.hbtns{display:flex;gap:6px;}
+.ibtn{background:var(--bg);border:0.5px solid var(--border);border-radius:var(--radius);padding:6px 11px;font-size:12px;cursor:pointer;color:var(--text2);font-family:var(--font);}
+.ibtn:hover{background:var(--bg2);}
+.ibtn.p{background:var(--c2ch);color:#fff;border-color:var(--c2ch);font-weight:700;}
+
+/* capacity strip */
+.cap-strip{display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:var(--bg);border:0.5px solid var(--border);border-radius:12px;padding:10px 14px;margin-bottom:12px;}
+.cap-box{display:flex;flex-direction:column;}
+.cap-box b{font-size:18px;font-family:var(--mono);}
+.cap-box small{font-size:10px;color:var(--text3);}
+.cap-sep{color:var(--text3);}
+.cap-bal{font-weight:700;font-size:13px;}
+.cap-bal.ok{color:var(--ok);}.cap-bal.ng{color:var(--danger);}
+.cap-pill{font-size:11px;padding:2px 8px;border-radius:999px;font-weight:700;}
+.pill-ok{background:var(--csma-bg);color:var(--ok);}.pill-ng{background:var(--danger-bg);color:var(--danger);}
+.quota{margin-left:auto;display:flex;align-items:center;gap:8px;background:var(--bg2);border-radius:10px;padding:6px 10px;}
+.quota b{font-family:var(--mono);font-size:15px;}
+.qbtn{border:1px solid var(--border);background:var(--bg);width:24px;height:24px;border-radius:6px;cursor:pointer;font-weight:800;}
+.qbtn.plus{background:var(--c2ch);color:#fff;border-color:var(--c2ch);}
+.praise{font-size:12px;font-weight:700;color:var(--cmtg);}
+.praise.hot{color:var(--c2ch);}
+
+.alert-bar{margin-bottom:12px;display:flex;flex-direction:column;gap:6px;}
+.alert-item{border-radius:var(--radius);padding:7px 13px;font-size:12px;display:flex;align-items:center;gap:8px;}
+.alert-warn{background:var(--warn-bg);color:var(--warn);}.alert-danger{background:var(--danger-bg);color:var(--danger);}
+
+.main{display:grid;grid-template-columns:1fr 340px;gap:12px;}
+@media(max-width:780px){.main{grid-template-columns:1fr;}}
+
+.card{background:var(--bg);border:0.5px solid var(--border);border-radius:12px;overflow:hidden;}
+.cal-nav{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:0.5px solid var(--border);}
+.cal-nav button{background:var(--bg2);border:0.5px solid var(--border);border-radius:6px;width:26px;height:26px;cursor:pointer;color:var(--text);font-size:14px;}
+.cal-month{font-size:13px;font-weight:700;flex:1;text-align:center;font-family:var(--mono);}
+.cal-dow{display:grid;grid-template-columns:repeat(7,1fr);padding:5px 8px 3px;}
+.cal-dow span{font-size:10px;text-align:center;color:var(--text3);font-family:var(--mono);}
+.cal-dow span:first-child{color:#E24B4A;}.cal-dow span:last-child{color:#378ADD;}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;padding:0 8px 8px;}
+.cal-cell{min-height:60px;border-radius:6px;padding:3px;cursor:pointer;}
+.cal-cell:hover{background:var(--bg2);}
+.cal-cell.selected{outline:1.5px solid var(--c2ch);outline-offset:-1px;background:var(--bg2);}
+.cal-cell.today .dnum{color:var(--c2ch);font-weight:700;}
+.cal-cell.other{opacity:.22;pointer-events:none;}
+.dnum{font-size:10px;text-align:center;color:var(--text2);margin-bottom:2px;font-family:var(--mono);}
+.cal-cell.sun .dnum{color:#E24B4A;}.cal-cell.sat .dnum{color:#378ADD;}
+.ev-chip{font-size:8px;border-radius:3px;padding:1px 3px;margin-bottom:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.35;}
+.ev-pop{background:var(--cpop-bg);color:var(--cpop);}.ev-2ch{background:var(--c2ch-bg);color:var(--c2ch);}
+.ev-sma{background:var(--csma-bg);color:var(--csma);}.ev-mtg{background:var(--cmtg-bg);color:var(--cmtg);}.ev-ops{background:var(--cops-bg);color:var(--cops);}
+.ev-priv{background:var(--cmtg-bg);color:var(--cmtg);}
+.legend{display:flex;gap:10px;flex-wrap:wrap;padding:8px 14px;border-top:0.5px solid var(--border);}
+.leg{display:flex;align-items:center;gap:4px;font-size:10px;color:var(--text2);}
+.leg-dot{width:7px;height:7px;border-radius:2px;}
+
+.tasks-section{margin-top:10px;}
+.sec-head{padding:8px 14px;border-bottom:0.5px solid var(--border);font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--text3);text-transform:uppercase;font-family:var(--mono);}
+.task-row{display:flex;gap:8px;align-items:flex-start;padding:7px 14px;border-bottom:0.5px solid var(--border);font-size:11px;}
+.task-row:last-child{border-bottom:none;}
+.task-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-top:3px;}
+.task-info{flex:1;}.task-name{font-weight:500;}.task-dates{font-size:10px;color:var(--text3);font-family:var(--mono);margin-top:1px;}
+.no-tasks{padding:14px;font-size:11px;color:var(--text3);font-family:var(--mono);}
+
+.day-panel{display:flex;flex-direction:column;}
+.day-header{padding:10px 14px;border-bottom:0.5px solid var(--border);}
+.day-title{font-size:14px;font-weight:700;font-family:var(--mono);}
+.day-meta{font-size:10px;color:var(--text3);margin-top:2px;}
+.day-body{padding:8px 10px;max-height:72vh;overflow-y:auto;}
+
+.act-box{background:var(--bg2);border-radius:8px;padding:8px 10px;margin-bottom:8px;}
+.act-h{font-size:10px;font-weight:700;letter-spacing:.05em;margin-bottom:5px;}
+.act-row{display:flex;gap:6px;align-items:flex-start;padding:3px 0;font-size:11px;}
+.act-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-top:3px;}
+.act-do{color:var(--text2);}
+.act-do.self{color:var(--c2ch);font-weight:700;}
+.act-do.chase{color:var(--warn);font-weight:700;}
+
+.tblock{display:flex;gap:6px;margin-bottom:5px;}
+.tblock-time{font-size:9px;color:var(--text3);width:38px;flex-shrink:0;font-family:var(--mono);padding-top:7px;text-align:right;}
+.tblock-card{flex:1;border-radius:7px;padding:7px 9px;border-left:3px solid transparent;cursor:pointer;}
+.tblock-card:hover{filter:brightness(.97);}
+.tblock-card.done{opacity:.45;filter:grayscale(.5);}
+.tblock-card.done .tblock-name::after{content:' ✓';}
+.tb-2ch{background:var(--c2ch-bg);border-color:var(--c2ch);}.tb-pop{background:var(--cpop-bg);border-color:var(--cpop);}
+.tb-sma{background:var(--csma-bg);border-color:var(--csma);}.tb-mtg{background:var(--cmtg-bg);border-color:var(--cmtg);}
+.tb-ops{background:var(--cops-bg);border-color:#CCC;}.tb-buf{background:var(--bg2);border:0.5px dashed var(--border);border-left:3px solid var(--border);}
+.tb-lunch{background:var(--bg2);border-left:3px solid var(--border);opacity:.6;}
+.tblock-name{font-size:11px;font-weight:700;}
+.tblock-detail{font-size:10px;color:var(--text2);margin-top:1px;line-height:1.4;}
+.prog-wrap{background:var(--border);border-radius:3px;height:4px;overflow:hidden;margin-top:5px;}
+.prog-bar{height:100%;border-radius:3px;transition:width .3s;}
+.prog-row{display:flex;gap:4px;margin-top:4px;align-items:center;}
+.prog-row input[type=range]{flex:1;height:18px;}
+.prog-row span{font-size:10px;color:var(--text2);min-width:26px;font-family:var(--mono);}
+.spot-badge{font-size:9px;background:var(--cmtg-bg);color:var(--cmtg);border-radius:3px;padding:1px 5px;display:inline-block;margin-bottom:2px;}
+.empty-day{font-size:12px;color:var(--text3);text-align:center;padding:30px 16px;font-family:var(--mono);}
+
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--text);color:#fff;border-radius:10px;padding:10px 16px;z-index:9999;font-size:12px;opacity:0;transition:.25s;}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+dialog{border:0;border-radius:12px;padding:18px;max-width:440px;width:92%;background:var(--bg);color:var(--text);}
+dialog::backdrop{background:rgba(0,0,0,.35);}
+dialog h3{margin-bottom:6px;font-size:15px;}
+dialog label{display:block;margin:.5rem 0;font-size:11px;color:var(--text2);}
+dialog input,dialog select{width:100%;padding:6px 8px;border:0.5px solid var(--border);border-radius:6px;margin-top:3px;background:var(--bg2);color:var(--text);font-size:12px;}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-top:6px;}
+.row .g{display:flex;flex-direction:column;gap:2px;}
+.row .g label{margin:0;}
+.dlg-actions{display:flex;gap:8px;margin-top:12px;align-items:center;}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="app-header">
+    <div>
+      <div class="app-title">📋 タスク管理</div>
+      <div class="app-sub">稼働 7:00〜20:00 ／ りゅうとん 台本3本/日 ／ 日曜午後オフ目標</div>
+    </div>
+    <div class="hbtns">
+      <button class="ibtn" id="b-spot">＋スポット</button>
+      <button class="ibtn" id="b-event">＋私用</button>
+      <button class="ibtn" id="b-sync" title="スプレッドシートから進行を取り込み">🔄 同期</button>
+      <button class="ibtn" id="b-set">⚙ 設定</button>
+    </div>
+  </div>
+
+  <div class="cap-strip" id="cap-strip"></div>
+  <div class="alert-bar" id="alert-bar"></div>
+
+  <div class="main">
+    <div>
+      <div class="card">
+        <div class="cal-nav">
+          <button id="m-prev">‹</button>
+          <div class="cal-month" id="cal-month"></div>
+          <button id="m-next">›</button>
+        </div>
+        <div class="cal-dow"><span>日</span><span>月</span><span>火</span><span>水</span><span>木</span><span>金</span><span>土</span></div>
+        <div class="cal-grid" id="cal-grid"></div>
+        <div class="legend">
+          <div class="leg"><div class="leg-dot" style="background:var(--cpop)"></div>Popteen</div>
+          <div class="leg"><div class="leg-dot" style="background:var(--c2ch)"></div>りゅうとん</div>
+          <div class="leg"><div class="leg-dot" style="background:var(--csma)"></div>スマホ</div>
+          <div class="leg"><div class="leg-dot" style="background:var(--cmtg)"></div>MTG/私用</div>
+        </div>
+      </div>
+      <div class="card tasks-section">
+        <div class="sec-head">案件一覧（編集者の進行）</div>
+        <div id="tasks-list"></div>
+      </div>
+    </div>
+
+    <div class="card day-panel">
+      <div class="day-header">
+        <div class="day-title" id="day-title">日付を選択</div>
+        <div class="day-meta" id="day-meta"></div>
+      </div>
+      <div class="day-body" id="day-body"><div class="empty-day">← 日付を選択</div></div>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<dialog id="dlg-spot">
+  <h3>スポット・急遽タスクを追加</h3>
+  <div class="row">
+    <div class="g"><label>日付</label><input type="date" id="sp-date"></div>
+    <div class="g"><label>開始</label><input type="time" id="sp-time" value="10:00"></div>
+    <div class="g"><label>時間(h)</label><input type="number" id="sp-dur" value="1" min="0.5" max="6" step="0.5"></div>
+    <div class="g"><label>種別</label><select id="sp-cat"><option value="mtg">MTG</option><option value="pop">Popteen</option><option value="2ch">りゅうとん</option><option value="sma">スマホ</option><option value="ops">その他</option></select></div>
+  </div>
+  <label>タイトル<input type="text" id="sp-title" placeholder="例：智哉さん緊急MTG"></label>
+  <div class="dlg-actions"><span style="flex:1"></span><button class="ibtn" id="sp-cancel">閉じる</button><button class="ibtn p" id="sp-add">追加</button></div>
+</dialog>
+
+<dialog id="dlg-set">
+  <h3>設定</h3>
+  <label>スプレッドシート進行URL（GAS Webアプリ・アクセス「全員」）<input id="set-sheet" placeholder="https://script.google.com/macros/s/.../exec"></label>
+  <hr style="border:none;border-top:0.5px solid var(--border);margin:10px 0">
+  <div style="font-size:11px;color:var(--text3);margin-bottom:4px">GitHub同期（任意・複数端末で共有）</div>
+  <div class="row">
+    <div class="g" style="flex:1"><label>owner</label><input id="set-owner"></div>
+    <div class="g" style="flex:1"><label>repo</label><input id="set-repo"></div>
+  </div>
+  <div class="row">
+    <div class="g"><label>branch</label><input id="set-branch" placeholder="main"></div>
+    <div class="g" style="flex:1"><label>path</label><input id="set-path" placeholder="tasks.json"></div>
+  </div>
+  <label>token (PAT)<input id="set-token" type="password" placeholder="github_pat_..."></label>
+  <div class="dlg-actions"><button class="ibtn" id="set-reset">ローカルリセット</button><span style="flex:1"></span><button class="ibtn" id="set-cancel">閉じる</button><button class="ibtn p" id="set-save">保存</button></div>
+</dialog>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

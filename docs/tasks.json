@@ -1,0 +1,66 @@
+{
+  "version": 3,
+  "updated_at": "2026-01-01T00:00:00+09:00",
+  "_note": "公開用シード。実データ（編集者の進行）は起動時にGAS WebアプリURLからブラウザのlocalStorageに取り込まれる。このファイルには機微データを置かない。",
+  "config": {
+    "me": "ryuto",
+    "default_pace_per_day": 1.5,
+    "health_weights": { "done": 0.6, "slack": 0.4 },
+    "cat_rules": {
+      "pop": { "warn_slack": 0.30,  "priority": 1, "label": "Popteen" },
+      "2ch": { "warn_slack": -0.30, "priority": 2, "label": "りゅうとん" },
+      "sma": { "warn_slack": -0.30, "priority": 3, "label": "スマホ" },
+      "ops": { "warn_slack": 0.0,   "priority": 4, "label": "運用" }
+    },
+    "cat_templates": {
+      "pop": ["edit", "fix"],
+      "2ch": ["edit"],
+      "sma": ["edit"],
+      "ops": ["task"]
+    },
+    "checkpoint_labels": {
+      "edit": "編集", "fix": "りゅうと修正", "task": "作業",
+      "telop": "テロップ", "ryuto_fb": "りゅうとFB", "draft": "初稿提出",
+      "plot": "企画", "script": "台本"
+    },
+    "cat_colors": {
+      "2ch": "#E8441C", "pop": "#C2407A", "sma": "#0E8F68", "ops": "#7A7672", "mtg": "#5B4FD4"
+    },
+    "capacity": {
+      "weeks_per_month": 4.33,
+      "available_h": { "mon": 12, "tue": 12, "wed": 12, "thu": 12, "fri": 12, "sat": 12, "sun_am": 5, "sun_pm": 5 },
+      "sunday_pm_off": true,
+      "overhead_h": { "morning_roundup_per_day": 1, "weekly_mtg": 1, "monthly_extra": 2 },
+      "businesses": {
+        "2ch": {
+          "label": "りゅうとん", "unit": "本", "weekly_target": 18,
+          "phases": [
+            { "key": "plot", "label": "企画", "h_per_unit": 0.7 },
+            { "key": "script", "label": "台本", "h_per_unit": 1.0 }
+          ],
+          "weekly_deliveries": 14, "fb_min_per_delivery": 10
+        },
+        "sma": {
+          "label": "スマホ", "unit": "本", "weekly_target": 2,
+          "phases": [
+            { "key": "plot", "label": "企画", "h_per_unit": 3 },
+            { "key": "script", "label": "台本/サムネ", "h_per_unit": 5 },
+            { "key": "comm", "label": "やりとり", "h_per_unit": 6 }
+          ],
+          "fb_min_per_unit": 30
+        },
+        "pop": {
+          "label": "Popteen", "unit": "本", "monthly_target": 10,
+          "phases": [],
+          "fb_h_per_unit": 2, "monthly_buffer_h": 5
+        }
+      }
+    }
+  },
+  "members": [
+    { "id": "ryuto", "discord_user_id": null, "name": "りゅうと", "pace_per_day": 2.0, "pace_samples": 0 }
+  ],
+  "projects": [],
+  "pending_suggestions": [],
+  "events": []
+}
