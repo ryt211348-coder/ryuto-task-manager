@@ -40,7 +40,7 @@ function baseSchedule(dow) {
         {t:"12:00",end:"13:00",cat:"ops",label:"昼食・仮眠",lunch:true},
         {t:"13:00",end:"14:00",cat:"sma",label:"スマホ① 台本・サムネ続き",detail:""},
         {t:"14:00",end:"15:00",cat:"mtg",label:"智哉さん週次MTG",detail:"毎週固定"},
-        {t:"15:00",end:"17:00",cat:"sma",label:"スマホ① やりとり・編集者へ渡し",detail:""},
+        {t:"15:00",end:"17:00",cat:"sma",label:"スマホ① 台本・サムネ仕上げ",detail:""},
         {t:"17:00",end:"18:30",cat:"2ch",label:"りゅうとん 台本（巻き取り）",detail:""},
         {t:"18:30",end:"20:00",cat:"ops",label:"バッファ",detail:"未完・突発対応",buf:true} ],
     3:[ {t:"7:00",end:"8:00",cat:"ops",label:"ミーティング準備",detail:""},
@@ -56,7 +56,7 @@ function baseSchedule(dow) {
         {t:"10:00",end:"12:00",cat:"sma",label:"スマホ② 台本・サムネ",detail:""},
         {t:"12:00",end:"13:00",cat:"ops",label:"昼食・仮眠",lunch:true},
         {t:"13:00",end:"15:00",cat:"sma",label:"スマホ② 台本・サムネ",detail:""},
-        {t:"15:00",end:"17:00",cat:"sma",label:"スマホ② やりとり・編集者へ渡し",detail:""},
+        {t:"15:00",end:"17:00",cat:"sma",label:"スマホ② 台本・サムネ仕上げ",detail:""},
         {t:"17:00",end:"18:30",cat:"2ch",label:"りゅうとん 編集FB",detail:""},
         {t:"18:30",end:"20:00",cat:"ops",label:"バッファ",detail:"",buf:true} ],
     5:[ {t:"7:00",end:"8:00",cat:"ops",label:"ミーティング準備",detail:"週次整理"},
@@ -104,45 +104,55 @@ function quotaDefault(dow) {
   const sma = { 2:1, 4:1 }[dow] || 0;
   return { "2ch": ryuton, "sma": sma };
 }
-function todayTargets() {
-  const ds = fmt(now()); const dow = new Date(ds+"T00:00:00").getDay();
+function todayTargets(ds = fmt(now())) {
+  const dow = new Date(ds+"T00:00:00").getDay();
   const def = quotaDefault(dow); const ov = (data.quota_target||{})[ds] || {};
   return { "2ch": ov["2ch"] ?? def["2ch"], "sma": ov["sma"] ?? def["sma"] };
 }
-const quotaActual = (cat) => (data.output_log?.[fmt(now())]?.[cat]?.script) || 0;
+// 完了した作業ブロック数で本数をカウント（チェックで自動増減）
+function quotaDone(ds) {
+  const dow = new Date(ds+"T00:00:00").getDay();
+  const blocks = baseSchedule(dow).concat(data.spots?.[ds] || []);
+  const cnt = { "2ch":0, "sma":0 };
+  blocks.forEach((b)=>{
+    if (b.lunch || b.buf || b.cat==="mtg") return;
+    if (b.cat!=="2ch" && b.cat!=="sma") return;
+    if ((data.done||{})[blockKey(ds,b.label,b.t)]) cnt[b.cat]++;
+  });
+  return cnt;
+}
+const QUOTA_MSGS = ["ノルマ いこう💪","1本目ナイス🔥","2本目、乗ってきた⚡","3本目！手が止まらない🙌","絶好調😤","量産モード🚀"];
+// 日付の横に出すノルマ（チェック数/目標）＋応援
+function renderDayMeta(ds) {
+  const isToday = ds===fmt(now());
+  const tgt = todayTargets(ds), done = quotaDone(ds);
+  const LBL = { "2ch":"りゅうとん", "sma":"スマホ" }, COL = { "2ch":"var(--c2ch)", "sma":"var(--csma)" };
+  const parts = [];
+  if (isToday) parts.push(`<span style="color:var(--text3)">今日</span>`);
+  ["2ch","sma"].forEach((cat)=>{
+    const t=tgt[cat]||0, n=done[cat]||0; if (t<=0 && n<=0) return;
+    const mark = n>=t&&t>0 ? (n>t?" 🔥":" ✓") : "";
+    parts.push(`<span data-tgt="${cat}" title="クリックで目標本数を変更" style="color:${COL[cat]};font-weight:700;cursor:pointer">${LBL[cat]} ${n}/${t}${mark}</span>`);
+  });
+  const totalA=(done["2ch"]||0)+(done["sma"]||0), totalT=(tgt["2ch"]||0)+(tgt["sma"]||0);
+  let praise = QUOTA_MSGS[Math.min(totalA, QUOTA_MSGS.length-1)];
+  if (totalT>0 && totalA>=totalT) praise = "🎉 ノルマ達成！えらい！";
+  if (totalT>0 && totalA>totalT) praise = `🔥 +${totalA-totalT}本 最高！`;
+  parts.push(`<span style="color:var(--cmtg);font-weight:700">${praise}</span>`);
+  $("#day-meta").innerHTML = parts.join(" ・ ");
+}
 
 function renderCapStrip() {
   const c = computeCapacity(data.config, now(), data.events || []);
   if (!c) { $("#cap-strip").innerHTML = ""; return; }
   const over = c.balance < 0;
-  const tgt = todayTargets();
-  const LBL = { "2ch": "りゅうとん台本", "sma": "スマホ" };
-  const COL = { "2ch": "var(--c2ch)", "sma": "var(--csma)" };
-  let totalA = 0, totalT = 0, counters = "";
-  ["2ch", "sma"].forEach((cat) => {
-    const t = tgt[cat] || 0, a = quotaActual(cat);
-    if (t <= 0 && a <= 0) return;
-    totalA += a; totalT += t;
-    const met = a >= t && t > 0, extra = a > t;
-    counters += `<span class="qitem">
-      <span class="qlabel" style="color:${COL[cat]}">${LBL[cat]}</span>
-      <button class="qbtn" data-q="-1" data-cat="${cat}">−</button>
-      <b data-tgt="${cat}" title="クリックで目標本数を変更">${a}/${t}</b>
-      <button class="qbtn plus" data-q="1" data-cat="${cat}">＋</button>
-      ${extra?"🔥":met?"✓":""}</span>`;
-  });
-  if (!counters) counters = `<span class="muted" style="font-size:12px">今日の制作目標なし（休/予備日）</span>`;
-  const MSGS = ["今日のノルマ、いこう💪","1本目ナイス！この調子🔥","2本目、乗ってきた⚡","3本目！手が止まらない🙌","絶好調、まだいける😤","量産モード突入🚀"];
-  let praise = MSGS[Math.min(totalA, MSGS.length - 1)];
-  if (totalT > 0 && totalA >= totalT) praise = "🎉 今日のノルマ達成！えらい！";
-  if (totalT > 0 && totalA > totalT) praise = `🔥 予定より ${totalA-totalT}本 多い！最高、その勢い！`;
   $("#cap-strip").innerHTML = `
     <div class="cap-box"><b style="color:${over?'var(--danger)':'var(--ok)'}">${round1(c.demand)}h</b><small>必要/週</small></div>
     <span class="cap-sep">vs</span>
     <div class="cap-box"><b>${round1(c.available)}h</b><small>使える/週</small></div>
     <span class="cap-bal ${over?'ng':'ok'}">${over?`⚠${round1(-c.balance)}h超過`:`✓${round1(c.balance)}h余裕`}</span>
     <span class="cap-pill ${c.sundayCanRest?'pill-ok':'pill-ng'}">${c.sundayCanRest?'日曜午後 休める':'日曜午後 要稼働'}</span>
-    <div class="quota">${counters}<span class="praise ${totalT>0&&totalA>totalT?'hot':''}">${praise}</span></div>`;
+    <span style="margin-left:auto;font-size:11px;color:var(--text3)">ノルマは右の日付の横に表示 →</span>`;
 }
 
 function renderAlerts() {
@@ -197,7 +207,7 @@ function renderCalendar() {
 function renderDay(ds) {
   const d = new Date(ds+"T00:00:00"), dow = d.getDay();
   $("#day-title").textContent = fmtDisp(ds);
-  $("#day-meta").textContent = ds===fmt(now()) ? "今日" : "";
+  renderDayMeta(ds);
   const body = $("#day-body"); body.innerHTML = "";
 
   // 撮影日などのメモ（自分のタスクではないが関連情報）
@@ -264,10 +274,13 @@ function renderTaskList() {
   const ps = (data.projects||[]).filter((p)=>p.status!=="done"&&p.status!=="canceled");
   if (!ps.length){ el.innerHTML=`<div class="no-tasks">案件なし（🔄でシートから取り込み）</div>`; return; }
   const color = (c)=>({ "2ch":"#E8441C",pop:"#C2407A",sma:"#0E8F68",ops:"#7A7672" })[c]||"#888";
+  // 提出種別で色を変える（和也＝ピンク / Slack＝パープル）
+  const sideColor = (p)=>{ if(p.cat==="pop"){ if(/和也/.test(p.title)) return "#C2407A"; if(/Slack/.test(p.title)) return "#5046C8"; } return color(p.cat); };
+  const sideBg = (p)=>{ if(p.cat==="pop"){ if(/和也/.test(p.title)) return "#FCE0EC"; if(/Slack/.test(p.title)) return "#E7E3FB"; } return "transparent"; };
   el.innerHTML = ps.map((p)=>{
     const c = classifyProj(p);
     const tag = c ? (c.type==="self"?esc(c.ball.checkpoint.label):c.type==="chase"?`${c.member?.name||""}に確認`:`${c.member?.name||""}待ち`) : "";
-    return `<div class="task-row"><div class="task-dot" style="background:${color(p.cat)}"></div>
+    return `<div class="task-row" style="border-left:4px solid ${sideColor(p)};background:${sideBg(p)}">
       <div class="task-info"><div class="task-name">${esc(p.title)}</div>
       <div class="task-dates">${p.due_at?fmt(new Date(p.due_at)):"—"} ・ ${esc(tag)}</div></div></div>`;
   }).join("");
@@ -288,18 +301,12 @@ function toggleDone(key){
   data.done[key]=!data.done[key]; if(data.done[key]) data.progress[key]=100;
   saveLocal(data); renderDay(selectedDate);
 }
-function bumpQuota(cat, delta){
-  const t=fmt(now());
-  data.output_log=data.output_log||{}; data.output_log[t]=data.output_log[t]||{}; data.output_log[t][cat]=data.output_log[t][cat]||{};
-  data.output_log[t][cat].script = Math.max(0,(data.output_log[t][cat].script||0)+delta);
-  saveLocal(data); renderCapStrip();
-}
 function setQuotaTarget(cat){
-  const ds=fmt(now()); const cur=todayTargets()[cat];
-  const v=prompt(`${cat==="2ch"?"りゅうとん":"スマホ"}の今日の目標本数`, cur); if(v===null) return;
+  const ds=selectedDate||fmt(now()); const cur=todayTargets(ds)[cat];
+  const v=prompt(`${cat==="2ch"?"りゅうとん":"スマホ"}の目標本数（${ds}）`, cur); if(v===null) return;
   const n=parseInt(v); if(isNaN(n)) return;
   data.quota_target=data.quota_target||{}; data.quota_target[ds]=data.quota_target[ds]||{}; data.quota_target[ds][cat]=n;
-  saveLocal(data); renderCapStrip();
+  saveLocal(data); renderDayMeta(ds);
 }
 
 // ---- スプレッドシート同期 ----
@@ -381,10 +388,7 @@ function wire(){
     saveGhConfig({owner:$("#set-owner").value.trim(),repo:$("#set-repo").value.trim(),branch:$("#set-branch").value.trim()||"main",path:$("#set-path").value.trim()||"tasks.json",token:$("#set-token").value.trim()});
     $("#dlg-set").close(); toast("設定を保存"); persist(); syncSheet(false); };
   $("#set-reset").onclick=async()=>{ if(!confirm("ローカルの変更を破棄して再読込しますか？")) return; resetLocal(); data=await loadData(); renderAll(); toast("再読込しました"); };
-  $("#cap-strip").addEventListener("click",(e)=>{
-    const b=e.target.closest("[data-q]"); if(b){ bumpQuota(b.dataset.cat, +b.dataset.q); return; }
-    const tg=e.target.closest("[data-tgt]"); if(tg) setQuotaTarget(tg.dataset.tgt);
-  });
+  $("#day-meta").addEventListener("click",(e)=>{ const tg=e.target.closest("[data-tgt]"); if(tg) setQuotaTarget(tg.dataset.tgt); });
   $("#day-body").addEventListener("click",(e)=>{
     const rn=e.target.closest("[data-rmnote]");
     if(rn){ const i=+rn.dataset.rmnote; (data.notes[selectedDate]||[]).splice(i,1); if(!data.notes[selectedDate]?.length) delete data.notes[selectedDate]; saveLocal(data); renderAll(); return; }
@@ -402,7 +406,7 @@ function wire(){
     const span=r.parentElement.querySelector("span"); if(span) span.textContent=val+"%";
     data.progress=data.progress||{}; data.done=data.done||{};
     data.progress[key]=val; data.done[key]=val>=100;
-    saveLocal(data);
+    saveLocal(data); renderDayMeta(selectedDate);
   });
 }
 
