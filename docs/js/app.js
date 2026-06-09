@@ -528,7 +528,96 @@ function importPlan(){
 }
 function resetDayPlan(){
   if(data.dayPlan) delete data.dayPlan[selectedDate];
-  saveLocal(data); $("#dlg-import").close(); renderDay(selectedDate); toast("既定の時間割に戻しました");
+  saveLocal(data); $("#dlg-import").close(); $("#dlg-shift").close(); renderDay(selectedDate); toast("既定の時間割に戻しました");
+}
+
+// ---- 始業時間に合わせて自動リスケジュール（残り時間に圧縮して詰め込む）----
+const minToT=(m)=>`${Math.floor(m/60)}:${String(Math.round(m)%60).padStart(2,"0")}`;
+// その日の予定を [startMin, endMin] に圧縮配置。MTG/スポットは時刻固定、昼食は時間維持、作業ブロックは比例圧縮。
+function reschedule(ds, startMin, endMin){
+  const base = dayBlocks(ds);
+  const isPinned = (b)=> b.cat==="mtg" || b.spot;                       // 相手がいる→時刻固定
+  const isDrop   = (b)=> b.buf===true && !b.spot && b.cat==="ops";      // 空バッファ/早朝/夜は捨てて窓にする
+  // 固定枠（窓内に重なるものだけ・窓でクリップ）
+  const pinned = base.filter(isPinned)
+    .map((b)=>({...b, s:timeToMin(b.t), e:timeToMin(b.end)}))
+    .filter((p)=> p.e>startMin && p.s<endMin)
+    .map((p)=>({...p, s:Math.max(p.s,startMin), e:Math.min(p.e,endMin)}))
+    .sort((a,b)=>a.s-b.s);
+  // 動かせる作業（元の順）。lunch は圧縮しない（comp:false）
+  const movable = base.filter((b)=>!isPinned(b) && !isDrop(b))
+    .map((b)=>({...b, dur:Math.max(15, timeToMin(b.end)-timeToMin(b.t)), comp:!b.lunch}));
+  // 固定枠を除いた空き区間
+  const segs=[]; let c=startMin;
+  pinned.forEach((p)=>{ if(p.s>c) segs.push([c,p.s]); c=Math.max(c,p.e); });
+  if(c<endMin) segs.push([c,endMin]);
+  const totalFree = segs.reduce((a,[s,e])=>a+(e-s),0);
+  const fixedDur  = movable.filter((m)=>!m.comp).reduce((a,m)=>a+m.dur,0);
+  const compDur   = movable.filter((m)=> m.comp).reduce((a,m)=>a+m.dur,0);
+  let scale = compDur>0 ? Math.min(1,(totalFree-fixedDur)/compDur) : 1;
+  if(!(scale>0)) scale=0.1;
+  movable.forEach((m)=>{ m.fit = m.comp ? Math.max(15, Math.round(m.dur*scale)) : m.dur; });
+  // 空き区間へ順番に流し込む（固定枠をまたぐ作業は「（続き）」で分割）
+  const out=[]; let si=0; let cur = segs.length ? segs[0][0] : startMin;
+  movable.forEach((m)=>{
+    let remaining=m.fit, first=true;
+    while(remaining>0 && si<segs.length){
+      if(cur>=segs[si][1]){ si++; if(si<segs.length) cur=segs[si][0]; continue; }
+      const take=Math.min(segs[si][1]-cur, remaining);
+      out.push({t:minToT(cur), end:minToT(cur+take), cat:m.cat, label:first?m.label:m.label+"（続き）", detail:m.detail||"", ...(m.lunch?{lunch:true}:{})});
+      cur+=take; remaining-=take; first=false;
+      if(remaining>0){ si++; if(si<segs.length) cur=segs[si][0]; }
+    }
+    if(remaining>0){ // 窓に収まらない分は終業後に延長
+      out.push({t:minToT(cur), end:minToT(cur+remaining), cat:m.cat, label:first?m.label:m.label+"（続き）", detail:m.detail||"", ...(m.lunch?{lunch:true}:{})});
+      cur+=remaining;
+    }
+  });
+  pinned.forEach((p)=> out.push({t:minToT(p.s), end:minToT(p.e), cat:p.cat, label:p.label, detail:p.detail||"", ...(p.spot?{spot:true,spotId:p.spotId}:{})}));
+  out.sort((a,b)=>timeToMin(a.t)-timeToMin(b.t));
+  // 時刻が連続する同一タスクの分割を結合（端数スリバー対策。MTGをまたぐ分割は時刻が非連続なので残る）
+  const baseLabel=(s)=>s.replace(/（続き）$/,""); const merged=[];
+  out.forEach((b)=>{ const last=merged[merged.length-1];
+    if(last && !last.spot && !b.spot && last.cat===b.cat && timeToMin(last.end)===timeToMin(b.t) && baseLabel(last.label)===baseLabel(b.label)){
+      last.end=b.end; last.label=baseLabel(last.label);
+    } else merged.push({...b});
+  });
+  return merged;
+}
+function shiftBounds(){
+  const sm=timeToMin($("#shift-start").value||"11:00");
+  const em=$("#shift-night").checked ? 1440 : timeToMin($("#shift-end").value||"20:00");
+  return { sm, em: Math.max(sm+30, em) };
+}
+function shiftPreview(){
+  const {sm,em}=shiftBounds();
+  const base=dayBlocks(selectedDate);
+  const isPinned=(b)=>b.cat==="mtg"||b.spot, isDrop=(b)=>b.buf===true&&!b.spot&&b.cat==="ops";
+  const work=base.filter((b)=>!isPinned(b)&&!isDrop(b));
+  const workH=work.reduce((a,b)=>a+Math.max(15,timeToMin(b.end)-timeToMin(b.t)),0)/60;
+  const pinH=base.filter(isPinned).filter((b)=>timeToMin(b.end)>sm&&timeToMin(b.t)<em)
+    .reduce((a,b)=>a+(Math.min(timeToMin(b.end),em)-Math.max(timeToMin(b.t),sm)),0)/60;
+  const freeH=Math.max(0,(em-sm)/60-pinH);
+  const ratio=workH>0?Math.min(100,Math.round(freeH/workH*100)):100;
+  const over=workH>freeH;
+  $("#shift-preview").innerHTML=`残り作業枠 <b>${round1(freeH)}h</b>${pinH>0?`（MTG等 ${round1(pinH)}h除く）`:""} に 予定 <b>${round1(workH)}h</b>`
+    +` → <b style="color:${over?'var(--danger)':'var(--ok)'}">${over?`⚠ ${ratio}%に圧縮`:`✓ そのまま入る`}</b>`
+    +`<br><span style="color:var(--text3)">${minToT(sm)}〜${minToT(em)}・作業${work.length}枠を詰め込み（MTG/スポットは固定）</span>`;
+}
+function openShift(){
+  const dow=new Date(selectedDate+"T00:00:00").getDay();
+  $("#shift-date").textContent=fmtDisp(selectedDate);
+  if(!$("#shift-start").value) $("#shift-start").value="11:00";
+  $("#shift-end").value="20:00"; $("#shift-night").checked=false;
+  shiftPreview(); $("#dlg-shift").showModal();
+}
+function applyShift(andCopy){
+  const {sm,em}=shiftBounds();
+  const blocks=reschedule(selectedDate, sm, em);
+  if(!blocks.length){ toast("詰め込む予定がありません"); return; }
+  data.dayPlan=data.dayPlan||{}; data.dayPlan[selectedDate]=blocks;
+  saveLocal(data); $("#dlg-shift").close(); renderDay(selectedDate);
+  if(andCopy){ copyDay(selectedDate); } else { toast(`${minToT(sm)}始業で詰め込みました`); }
 }
 
 // ---- 設定 ----
@@ -574,6 +663,12 @@ function wire(){
   $("#b-note").onclick=addNote;
   $("#b-copy").onclick=()=>copyDay(selectedDate);
   $("#b-import").onclick=openImport;
+  $("#b-shift").onclick=openShift;
+  $("#shift-cancel").onclick=()=>$("#dlg-shift").close();
+  $("#shift-apply").onclick=()=>applyShift(false);
+  $("#shift-applycopy").onclick=()=>applyShift(true);
+  $("#shift-reset").onclick=resetDayPlan;
+  $("#dlg-shift").addEventListener("input", shiftPreview);
   $("#imp-cancel").onclick=()=>$("#dlg-import").close();
   $("#imp-apply").onclick=importPlan;
   $("#imp-reset").onclick=resetDayPlan;
