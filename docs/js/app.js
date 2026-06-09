@@ -477,6 +477,24 @@ function addEvent(){
   saveLocal(data); renderAll(); toast("私用を追加");
 }
 
+// ---- Discord形式でコピー（【午前】【午後】・完了は取り消し線）----
+function copyDayText(ds){
+  const blocks = dayBlocks(ds).filter((b)=>!b.lunch && !b.buf); // 昼食・空バッファは除外（タスク配置済みは buf:false で残る）
+  const am=[], pm=[];
+  blocks.forEach((b)=>{
+    const done = (data.done||{})[blockKey(ds,b.label,b.t)];
+    const line = `${b.t} ${b.label}`;
+    (timeToMin(b.t) < 720 ? am : pm).push(done ? `~~${line}~~` : line);
+  });
+  return `【午前】\n${am.join("\n")}\n\n【午後】\n${pm.join("\n")}`;
+}
+function copyDay(ds){
+  const text = copyDayText(ds);
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(()=>toast("コピーしました（Discordに貼り付け）")).catch(()=>prompt("コピーしてください", text));
+  } else { prompt("コピーしてください", text); }
+}
+
 // ---- 設定 ----
 function openSet(){ const g=loadGhConfig()||{}; $("#set-sheet").value=loadSheetUrl(); $("#set-owner").value=g.owner||""; $("#set-repo").value=g.repo||""; $("#set-branch").value=g.branch||"main"; $("#set-path").value=g.path||"tasks.json"; $("#set-token").value=g.token||""; $("#dlg-set").showModal(); }
 
@@ -518,6 +536,7 @@ function wire(){
   $("#b-sync").onclick=()=>syncSheet(false);
   $("#b-event").onclick=addEvent;
   $("#b-note").onclick=addNote;
+  $("#b-copy").onclick=()=>copyDay(selectedDate);
   $("#b-spot").onclick=()=>{ $("#sp-date").value=selectedDate||fmt(now()); $("#dlg-spot").showModal(); };
   $("#sp-cancel").onclick=()=>$("#dlg-spot").close();
   $("#sp-add").onclick=addSpot;
