@@ -56,9 +56,9 @@ function smaWeekday() {
     {t:"8:00",end:"10:00",cat:"2ch",label:"りゅうとん 台本（ストック）",detail:"まず1日分"},
     {t:"10:00",end:"12:00",cat:"2ch",label:"りゅうとん 台本（ストック）",detail:""},
     {t:"12:00",end:"13:00",cat:"ops",label:"昼食・仮眠",lunch:true},
-    {t:"13:00",end:"15:00",cat:"sma",label:"スマホ 企画・撮影チェック",detail:"由美子 週1本"},
-    {t:"15:00",end:"17:00",cat:"sma",label:"スマホ 台本・サムネ",detail:""},
-    {t:"17:00",end:"18:30",cat:"sma",label:"スマホ 編集FB・修正指示",detail:""},
+    {t:"13:00",end:"15:00",cat:"sma",label:"スマホ 企画・台本",detail:"由美子 週1本"},
+    {t:"15:00",end:"17:00",cat:"pop",label:"Popteen 確認・FB・修正",detail:"素材確認・修正指示"},
+    {t:"17:00",end:"18:30",cat:"sma",label:"スマホ 編集FB",detail:""},
     {t:"18:30",end:"20:00",cat:"ops",label:"バッファ",detail:"未完・突発対応",buf:true},
   ];
 }
@@ -495,6 +495,42 @@ function copyDay(ds){
   } else { prompt("コピーしてください", text); }
 }
 
+// ---- 貼り付け反映（「時刻 内容」の行をその日の時間割に）----
+function inferCat(label){
+  if (/ミーティング準備|進捗シート|CW|朝まとめ|まとめ|スカウト|言語化|日報/.test(label)) return "ops";
+  if (/MTG|ミーティング|智哉|ともや|和也|カズヤ|会議|1on1/.test(label)) return "mtg";
+  if (/スマホ|由美子/.test(label)) return "sma";
+  if (/Popteen|ポップ|TC#?\d|墓コス|ドッキリ|ワサビ|美容vlog|同じ色|6文字|風船|数字当て|修正/.test(label)) return "pop";
+  if (/2ch|2ｃｈ|りゅうとん|りゅうとん|シナリオ|台本|企画|編集FB/.test(label)) return "2ch";
+  return "ops";
+}
+function parsePlan(text){
+  const items=[];
+  text.split("\n").forEach((l)=>{
+    const m=l.trim().match(/^(\d{1,2})[:：](\d{2})\s*(.+)$/);
+    if(!m) return;
+    items.push({ min:+m[1]*60+ +m[2], t:`${+m[1]}:${m[2]}`, label:m[3].trim() });
+  });
+  items.sort((a,b)=>a.min-b.min);
+  return items.map((it,i)=>{
+    const endMin = i<items.length-1 ? items[i+1].min : Math.min(it.min+90,1440);
+    const end = `${Math.floor(endMin/60)}:${String(endMin%60).padStart(2,"0")}`;
+    return { t:it.t, end, cat:inferCat(it.label), label:it.label, detail:"" };
+  });
+}
+function dayPlainLines(ds){ return dayBlocks(ds).filter((b)=>!b.lunch&&!b.buf).map((b)=>`${b.t} ${b.label}`).join("\n"); }
+function openImport(){ $("#imp-date").textContent=fmtDisp(selectedDate); $("#imp-text").value=dayPlainLines(selectedDate); $("#dlg-import").showModal(); }
+function importPlan(){
+  const blocks=parsePlan($("#imp-text").value);
+  if(!blocks.length){ toast("「時刻 内容」の行がありません"); return; }
+  data.dayPlan=data.dayPlan||{}; data.dayPlan[selectedDate]=blocks;
+  saveLocal(data); $("#dlg-import").close(); renderDay(selectedDate); toast("予定を反映しました");
+}
+function resetDayPlan(){
+  if(data.dayPlan) delete data.dayPlan[selectedDate];
+  saveLocal(data); $("#dlg-import").close(); renderDay(selectedDate); toast("既定の時間割に戻しました");
+}
+
 // ---- 設定 ----
 function openSet(){ const g=loadGhConfig()||{}; $("#set-sheet").value=loadSheetUrl(); $("#set-owner").value=g.owner||""; $("#set-repo").value=g.repo||""; $("#set-branch").value=g.branch||"main"; $("#set-path").value=g.path||"tasks.json"; $("#set-token").value=g.token||""; $("#dlg-set").showModal(); }
 
@@ -537,6 +573,10 @@ function wire(){
   $("#b-event").onclick=addEvent;
   $("#b-note").onclick=addNote;
   $("#b-copy").onclick=()=>copyDay(selectedDate);
+  $("#b-import").onclick=openImport;
+  $("#imp-cancel").onclick=()=>$("#dlg-import").close();
+  $("#imp-apply").onclick=importPlan;
+  $("#imp-reset").onclick=resetDayPlan;
   $("#b-spot").onclick=()=>{ $("#sp-date").value=selectedDate||fmt(now()); $("#dlg-spot").showModal(); };
   $("#sp-cancel").onclick=()=>$("#dlg-spot").close();
   $("#sp-add").onclick=addSpot;
